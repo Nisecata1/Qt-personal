@@ -1,0 +1,7 @@
+{
+    "cmake.configureSettings": {
+        // 告诉 CMake 你的 Qt 装在哪了
+        // 注意：路径里的斜杠必须是 / 或者是 \\，不能是单反斜杠 \
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.5.3/msvc2019_64"
+    }
+}
