@@ -141,10 +141,31 @@ Config &Config::getInstance()
 const QString &Config::getConfigPath()
 {
     if (s_configPath.isEmpty()) {
-        s_configPath = QString::fromLocal8Bit(qgetenv("QTSCRCPY_CONFIG_PATH"));
-        QFileInfo fileInfo(s_configPath);
-        if (s_configPath.isEmpty() || !fileInfo.isDir()) {
-            // default application dir
+        // Priority:
+        // 1) "<exe-dir>/config"
+        // 2) QTSCRCPY_CONFIG_PATH
+        // 3) legacy fallback
+        const QString appDir = QCoreApplication::applicationDirPath();
+        if (!appDir.isEmpty()) {
+            const QString appConfigPath = appDir + "/config";
+            QFileInfo appConfigInfo(appConfigPath);
+            if (appConfigInfo.isDir()) {
+                s_configPath = appConfigPath;
+                return s_configPath;
+            }
+        }
+
+        const QString envConfigPath = QString::fromLocal8Bit(qgetenv("QTSCRCPY_CONFIG_PATH"));
+        QFileInfo envConfigInfo(envConfigPath);
+        if (!envConfigPath.isEmpty() && envConfigInfo.isDir()) {
+            s_configPath = envConfigPath;
+            return s_configPath;
+        }
+
+        if (!appDir.isEmpty()) {
+            // If "<exe-dir>/config" does not exist yet, still use it as the default target.
+            s_configPath = appDir + "/config";
+        } else {
             // mac系统当从finder打开app时，默认工作目录不再是可执行程序的目录了，而是"/"
             // 而Qt的获取工作目录的api都依赖QCoreApplication的初始化，所以使用mac api获取当前目录
 #ifdef Q_OS_OSX

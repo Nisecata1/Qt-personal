@@ -1,10 +1,13 @@
 // #include <QDesktopWidget>
+#include <QCursor>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QSettings>
 #include <QScreen>
 #include <QShortcut>
 #include <QStyle>
@@ -25,6 +28,32 @@
 #include "ui_videoform.h"
 #include "videoform.h"
 
+namespace {
+constexpr qreal kRawSyntheticGlobalSentinel = -1000000.0;
+constexpr int kRawInputSendHzMin = 60;
+constexpr int kRawInputSendHzMax = 1000;
+constexpr double kRawInputScaleMin = 0.1;
+constexpr double kRawInputScaleMax = 50.0;
+constexpr int kRelativeLookConfigDebounceMs = 120;
+
+QString resolveUserDataIniPath()
+{
+    const QString appUserDataPath = QCoreApplication::applicationDirPath() + "/config/userdata.ini";
+    QFileInfo appUserDataInfo(appUserDataPath);
+    if (appUserDataInfo.exists() && appUserDataInfo.isFile()) {
+        return appUserDataPath;
+    }
+
+    const QString envConfigPath = QString::fromLocal8Bit(qgetenv("QTSCRCPY_CONFIG_PATH"));
+    QFileInfo envConfigInfo(envConfigPath);
+    if (!envConfigPath.isEmpty() && envConfigInfo.exists() && envConfigInfo.isDir()) {
+        return envConfigPath + "/userdata.ini";
+    }
+
+    return appUserDataPath;
+}
+} // namespace
+
 VideoForm::VideoForm(bool framelessWindow, bool skin, bool showToolbar, QWidget *parent) : QWidget(parent), ui(new Ui::videoForm), m_skin(skin)
 {
     ui->setupUi(this);
@@ -43,6 +72,7 @@ VideoForm::VideoForm(bool framelessWindow, bool skin, bool showToolbar, QWidget 
 
 VideoForm::~VideoForm()
 {
+    setRawInputActive(false);
     delete ui;
 }
 
@@ -81,6 +111,13 @@ void VideoForm::initUI()
     setMouseTracking(true);
     m_videoWidget->setMouseTracking(true);
     ui->keepRatioWidget->setMouseTracking(true);
+
+    m_rawInputSendTimer = new QTimer(this);
+    connect(m_rawInputSendTimer, &QTimer::timeout, this, [this]() {
+        dispatchRawInputMouseMove(false);
+    });
+
+    initRelativeLookConfigWatcher();
 }
 
 QRect VideoForm::getGrabCursorRect()
@@ -532,8 +569,237 @@ void VideoForm::updateFPS(quint32 fps)
 
 void VideoForm::grabCursor(bool grab)
 {
+    m_cursorGrabbed = grab;
+    reloadRelativeLookInputConfig();
+
     QRect rc = getGrabCursorRect();
     MouseTap::getInstance()->enableMouseEventTap(rc, grab);
+
+    const bool enableRawInput = grab && m_rawInputEnabled;
+    setRawInputActive(enableRawInput);
+
+    if (!grab) {
+        centerCursorToVideoFrame();
+    }
+}
+
+void VideoForm::centerCursorToVideoFrame()
+{
+    if (!isVisible()) {
+        return;
+    }
+
+    if (m_videoWidget && !m_videoWidget->rect().isEmpty()) {
+        QCursor::setPos(m_videoWidget->mapToGlobal(m_videoWidget->rect().center()));
+        return;
+    }
+
+    if (ui && ui->keepRatioWidget && !ui->keepRatioWidget->rect().isEmpty()) {
+        QCursor::setPos(ui->keepRatioWidget->mapToGlobal(ui->keepRatioWidget->rect().center()));
+    }
+}
+
+void VideoForm::initRelativeLookConfigWatcher()
+{
+    m_relativeLookConfigWatcher = new QFileSystemWatcher(this);
+    m_relativeLookConfigDebounceTimer = new QTimer(this);
+    m_relativeLookConfigDebounceTimer->setSingleShot(true);
+
+    connect(m_relativeLookConfigDebounceTimer, &QTimer::timeout, this, [this]() {
+        ensureRelativeLookConfigWatchPath();
+        reloadRelativeLookInputConfig();
+    });
+
+    connect(m_relativeLookConfigWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &) {
+        ensureRelativeLookConfigWatchPath();
+        if (m_relativeLookConfigDebounceTimer) {
+            m_relativeLookConfigDebounceTimer->start(kRelativeLookConfigDebounceMs);
+        }
+    });
+
+    connect(m_relativeLookConfigWatcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
+        ensureRelativeLookConfigWatchPath();
+        if (m_relativeLookConfigDebounceTimer) {
+            m_relativeLookConfigDebounceTimer->start(kRelativeLookConfigDebounceMs);
+        }
+    });
+
+    ensureRelativeLookConfigWatchPath();
+}
+
+void VideoForm::ensureRelativeLookConfigWatchPath()
+{
+    if (!m_relativeLookConfigWatcher) {
+        return;
+    }
+
+    const QString currentIniPath = resolveUserDataIniPath();
+    if (m_relativeLookConfigPath != currentIniPath && !m_relativeLookConfigPath.isEmpty()) {
+        m_relativeLookConfigWatcher->removePath(m_relativeLookConfigPath);
+    }
+    m_relativeLookConfigPath = currentIniPath;
+
+    QFileInfo iniInfo(m_relativeLookConfigPath);
+    const QString currentDirPath = iniInfo.absolutePath();
+    if (m_relativeLookConfigDirPath != currentDirPath && !m_relativeLookConfigDirPath.isEmpty()) {
+        m_relativeLookConfigWatcher->removePath(m_relativeLookConfigDirPath);
+    }
+    m_relativeLookConfigDirPath = currentDirPath;
+
+    if (!m_relativeLookConfigDirPath.isEmpty() && !m_relativeLookConfigWatcher->directories().contains(m_relativeLookConfigDirPath)) {
+        m_relativeLookConfigWatcher->addPath(m_relativeLookConfigDirPath);
+    }
+
+    if (iniInfo.exists() && iniInfo.isFile() && !m_relativeLookConfigWatcher->files().contains(m_relativeLookConfigPath)) {
+        m_relativeLookConfigWatcher->addPath(m_relativeLookConfigPath);
+    }
+}
+
+void VideoForm::reloadRelativeLookInputConfig()
+{
+    QString iniPath = resolveUserDataIniPath();
+    QFileInfo fileInfo(iniPath);
+    const qint64 modifiedMs = fileInfo.exists() ? fileInfo.lastModified().toMSecsSinceEpoch() : -1;
+    if (m_relativeLookConfigLoaded && iniPath == m_relativeLookConfigPath && modifiedMs == m_relativeLookConfigLastModifiedMs) {
+        return;
+    }
+
+    QSettings settings(iniPath, QSettings::IniFormat);
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
+    settings.setIniCodec("UTF-8");
+#endif
+
+    const QString serialKeyPrefix = m_serial.trimmed();
+    const bool hasSerialSection = !serialKeyPrefix.isEmpty();
+    const QString rawInputDeviceKey = hasSerialSection ? (serialKeyPrefix + "/RelativeLookRawInput") : QString();
+    const QString sendHzDeviceKey = hasSerialSection ? (serialKeyPrefix + "/RelativeLookSendHz") : QString();
+    const QString rawScaleDeviceKey = hasSerialSection ? (serialKeyPrefix + "/RelativeLookRawScale") : QString();
+
+    const bool useDeviceRawInput = hasSerialSection && settings.contains(rawInputDeviceKey);
+    const bool useDeviceSendHz = hasSerialSection && settings.contains(sendHzDeviceKey);
+    const bool useDeviceRawScale = hasSerialSection && settings.contains(rawScaleDeviceKey);
+
+    m_rawInputEnabled = useDeviceRawInput
+        ? settings.value(rawInputDeviceKey).toBool()
+        : settings.value("common/RelativeLookRawInput", true).toBool();
+
+    int sendHz = useDeviceSendHz
+        ? settings.value(sendHzDeviceKey).toInt()
+        : settings.value("common/RelativeLookSendHz", 240).toInt();
+    m_rawInputSendHz = qBound(kRawInputSendHzMin, sendHz, kRawInputSendHzMax);
+
+    bool scaleOk = false;
+    double scale = (useDeviceRawScale
+        ? settings.value(rawScaleDeviceKey)
+        : settings.value("common/RelativeLookRawScale", 12.0)).toDouble(&scaleOk);
+    if (!scaleOk) {
+        scale = 12.0;
+    }
+    m_rawInputScale = qBound(kRawInputScaleMin, scale, kRawInputScaleMax);
+
+    m_relativeLookConfigLastModifiedMs = modifiedMs;
+    m_relativeLookConfigLoaded = true;
+
+    const bool shouldRawInputBeActive = m_cursorGrabbed && m_rawInputEnabled;
+    if (m_rawInputActive != shouldRawInputBeActive) {
+        setRawInputActive(shouldRawInputBeActive);
+    } else if (m_rawInputActive && m_rawInputSendTimer) {
+        m_rawInputSendTimer->start(qMax(1, qRound(1000.0 / m_rawInputSendHz)));
+    }
+
+    qInfo() << "RelativeLook input config loaded:"
+            << "rawInput=" << m_rawInputEnabled
+            << "sendHz=" << m_rawInputSendHz
+            << "rawScale=" << m_rawInputScale
+            << "source=" << (hasSerialSection ? serialKeyPrefix : "common");
+}
+
+void VideoForm::setRawInputActive(bool active)
+{
+#if defined(Q_OS_WIN32)
+    if (m_rawInputActive == active) {
+        return;
+    }
+
+    if (active) {
+        RAWINPUTDEVICE rawInputDevice;
+        rawInputDevice.usUsagePage = 0x01;
+        rawInputDevice.usUsage = 0x02;
+        rawInputDevice.dwFlags = 0;
+        rawInputDevice.hwndTarget = reinterpret_cast<HWND>(winId());
+
+        if (!RegisterRawInputDevices(&rawInputDevice, 1, sizeof(rawInputDevice))) {
+            qWarning() << "RegisterRawInputDevices failed, fallback to mouse move events.";
+            m_rawInputRegistered = false;
+            m_rawInputActive = false;
+            return;
+        }
+
+        m_rawInputRegistered = true;
+        m_rawInputActive = true;
+        m_rawInputAccumDelta = QPointF(0.0, 0.0);
+        m_rawInputVirtualPos = QPointF(0.0, 0.0);
+        dispatchRawInputMouseMove(true);
+        if (m_rawInputSendTimer) {
+            m_rawInputSendTimer->start(qMax(1, qRound(1000.0 / m_rawInputSendHz)));
+        }
+    } else {
+        if (m_rawInputSendTimer) {
+            m_rawInputSendTimer->stop();
+        }
+
+        if (m_rawInputRegistered) {
+            RAWINPUTDEVICE rawInputDevice;
+            rawInputDevice.usUsagePage = 0x01;
+            rawInputDevice.usUsage = 0x02;
+            rawInputDevice.dwFlags = RIDEV_REMOVE;
+            rawInputDevice.hwndTarget = nullptr;
+            RegisterRawInputDevices(&rawInputDevice, 1, sizeof(rawInputDevice));
+        }
+
+        m_rawInputRegistered = false;
+        m_rawInputActive = false;
+        m_rawInputAccumDelta = QPointF(0.0, 0.0);
+    }
+#else
+    Q_UNUSED(active)
+#endif
+}
+
+void VideoForm::dispatchRawInputMouseMove(bool forceSend)
+{
+#if defined(Q_OS_WIN32)
+    if (!m_rawInputActive || !m_videoWidget) {
+        return;
+    }
+
+    auto device = qsc::IDeviceManage::getInstance().getDevice(m_serial);
+    if (!device) {
+        return;
+    }
+
+    QPointF rawDelta = m_rawInputAccumDelta;
+    m_rawInputAccumDelta = QPointF(0.0, 0.0);
+
+    QPointF scaledDelta(rawDelta.x() * m_rawInputScale, rawDelta.y() * m_rawInputScale);
+    if (!forceSend && qFuzzyIsNull(scaledDelta.x()) && qFuzzyIsNull(scaledDelta.y())) {
+        return;
+    }
+
+    m_rawInputVirtualPos += scaledDelta;
+
+    const QPointF globalSentinel(kRawSyntheticGlobalSentinel, kRawSyntheticGlobalSentinel);
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
+    QMouseEvent mouseEvent(QEvent::MouseMove, m_rawInputVirtualPos, globalSentinel,
+                           Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+#else
+    QMouseEvent mouseEvent(QEvent::MouseMove, m_rawInputVirtualPos, globalSentinel,
+                           Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+#endif
+    emit device->mouseEvent(&mouseEvent, m_videoWidget->frameSize(), m_videoWidget->size());
+#else
+    Q_UNUSED(forceSend)
+#endif
 }
 
 void VideoForm::onFrame(int width, int height, uint8_t *dataY, uint8_t *dataU, uint8_t *dataV, int linesizeY, int linesizeU, int linesizeV)
@@ -650,6 +916,9 @@ void VideoForm::mouseMoveEvent(QMouseEvent *event)
 #endif
     auto device = qsc::IDeviceManage::getInstance().getDevice(m_serial);
     if (m_videoWidget->geometry().contains(event->pos())) {
+        if (m_rawInputActive && m_cursorGrabbed) {
+            return;
+        }
         if (!device) {
             return;
         }
@@ -663,6 +932,38 @@ void VideoForm::mouseMoveEvent(QMouseEvent *event)
         }
     }
 }
+
+#if defined(Q_OS_WIN32)
+bool VideoForm::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    Q_UNUSED(eventType)
+    Q_UNUSED(result)
+
+    MSG *msg = static_cast<MSG *>(message);
+    if (!m_rawInputActive || !m_cursorGrabbed || !msg || msg->message != WM_INPUT) {
+        return QWidget::nativeEvent(eventType, message, result);
+    }
+
+    UINT size = 0;
+    if (GetRawInputData(reinterpret_cast<HRAWINPUT>(msg->lParam), RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER)) != 0
+        || size == 0) {
+        return QWidget::nativeEvent(eventType, message, result);
+    }
+
+    QByteArray buffer(static_cast<int>(size), 0);
+    if (GetRawInputData(reinterpret_cast<HRAWINPUT>(msg->lParam), RID_INPUT, buffer.data(), &size, sizeof(RAWINPUTHEADER)) != size) {
+        return QWidget::nativeEvent(eventType, message, result);
+    }
+
+    RAWINPUT *raw = reinterpret_cast<RAWINPUT *>(buffer.data());
+    if (raw->header.dwType == RIM_TYPEMOUSE) {
+        m_rawInputAccumDelta.rx() += static_cast<qreal>(raw->data.mouse.lLastX);
+        m_rawInputAccumDelta.ry() += static_cast<qreal>(raw->data.mouse.lLastY);
+    }
+
+    return QWidget::nativeEvent(eventType, message, result);
+}
+#endif
 
 void VideoForm::mouseDoubleClickEvent(QMouseEvent *event)
 {

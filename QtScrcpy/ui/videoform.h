@@ -1,7 +1,10 @@
 #ifndef VIDEOFORM_H
 #define VIDEOFORM_H
 
+#include <QFileSystemWatcher>
+#include <QPointF>
 #include <QPointer>
+#include <QTimer>
 #include <QWidget>
 
 #include "../QtScrcpyCore/include/QtScrcpyCore.h"
@@ -43,6 +46,12 @@ private:
     void updateStyleSheet(bool vertical);
     QMargins getMargins(bool vertical);
     void initUI();
+    void centerCursorToVideoFrame();
+    void initRelativeLookConfigWatcher();
+    void ensureRelativeLookConfigWatchPath();
+    void reloadRelativeLookInputConfig();
+    void setRawInputActive(bool active);
+    void dispatchRawInputMouseMove(bool forceSend = false);
 
     void showToolForm(bool show = true);
     void moveCenter();
@@ -67,6 +76,9 @@ protected:
     void dragMoveEvent(QDragMoveEvent *event) override;
     void dragLeaveEvent(QDragLeaveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+#if defined(Q_OS_WIN32)
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+#endif
 
 private:
     // ui
@@ -87,6 +99,23 @@ private:
 
     //Whether to display the toolbar when connecting a device.
     bool show_toolbar = true;
+
+    bool m_cursorGrabbed = false;
+    bool m_rawInputEnabled = true;
+    bool m_rawInputRegistered = false;
+    bool m_rawInputActive = false;
+    int m_rawInputSendHz = 240;
+    double m_rawInputScale = 12.0;
+    QPointF m_rawInputAccumDelta = QPointF(0.0, 0.0);
+    QPointF m_rawInputVirtualPos = QPointF(0.0, 0.0);
+    QTimer *m_rawInputSendTimer = nullptr;
+
+    QFileSystemWatcher *m_relativeLookConfigWatcher = nullptr;
+    QTimer *m_relativeLookConfigDebounceTimer = nullptr;
+    QString m_relativeLookConfigPath;
+    QString m_relativeLookConfigDirPath;
+    qint64 m_relativeLookConfigLastModifiedMs = -2;
+    bool m_relativeLookConfigLoaded = false;
 };
 
 #endif // VIDEOFORM_H

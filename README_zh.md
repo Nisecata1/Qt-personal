@@ -53,7 +53,7 @@ QtScrcpy 可以通过 USB / 网络连接Android设备，并进行显示和控制
 ## 自定义按键映射
 可以根据需要，自己编写脚本将键盘按键映射为手机的触摸点击，编写规则在[这里](docs/KeyMapDes_zh.md)。
 
-默认自带了针对和平精英手游和抖音进行键鼠映射的映射脚本，开启平精英手游后可以用键鼠像玩端游一样玩和平精英手游，开启抖音映射以后可以使用上下左右方向键模拟上下左右滑动，你也可以按照[编写规则](docs/KeyMapDes_zh.md)编写其他游戏的映射文件，默认按键映射如下：
+默认自带了针对和平精英手游和抖音的键鼠映射脚本，开启和平精英手游后可以用键鼠像玩端游一样玩和平精英手游，开启抖音映射以后可以使用上下左右方向键模拟上下左右滑动，你也可以按照[编写规则](docs/KeyMapDes_zh.md)编写其他游戏的映射文件，默认按键映射如下：
 
 ![game](screenshot/game.png)
 
@@ -145,7 +145,7 @@ Windows 平台，你可以直接使用我编译好的可执行程序:
  - [国内下载][gitee-download]
  - [国外下载][github-download]
 
-你也可以[自己编译](##编译)
+你也可以[自己编译](#编译)
 
 ### Mac OS
 
@@ -154,7 +154,7 @@ Mac OS 平台，你可以直接使用我编译好的可执行程序:
 - [国内下载][gitee-download]
 - [国外下载][github-download]
 
-你也可以[自己编译](##编译)
+你也可以[自己编译](#编译)
 
 ### Linux
 
@@ -166,7 +166,7 @@ Mac OS 平台，你可以直接使用我编译好的可执行程序:
 
 你也可以从 [GitHub Actions](https://github.com/UjhhgtgTeams/QtScrcpy/actions/workflows/ubuntu.yml) 获取最新的自动编译好的软件
 
-当然，你也可以[自己编译](##编译)（不推荐，需要准备环境）
+当然，你也可以[自己编译](#编译)（不推荐，需要准备环境）
 
 目前只在 Ubuntu 和 Arch Linux 上测试过编译过程
 
@@ -210,7 +210,7 @@ Mac OS 平台，你可以直接使用我编译好的可执行程序:
 
 ## 功能
 - 实时显示 Android 设备屏幕
-- 实时键鼠控制Android设备
+- 实时键鼠控制 Android 设备
 - 屏幕录制
 - 截图
 - 无线连接
@@ -225,7 +225,7 @@ Mac OS 平台，你可以直接使用我编译好的可执行程序:
     - `Ctrl + c`将设备剪贴板复制到计算机剪贴板；
     - `Ctrl + Shift + v`将计算机剪贴板复制到设备剪贴板；
     - `Ctrl + v` 将计算机剪贴板作为一系列文本事件发送到设备（不支持非ASCII字符）
-- 同步设备扬声器声音到电脑（基于[sndcpy](https://github.com/rom1v/sndcpy)，仅支持安卓10级以上，目前不推荐使用，可使用蓝牙连接替代）
+- 同步设备扬声器声音到电脑（基于[sndcpy](https://github.com/rom1v/sndcpy)，仅支持安卓 10 及以上，目前不推荐使用，可使用蓝牙连接替代）
 
 ## 快捷键
 
@@ -245,10 +245,10 @@ Mac OS 平台，你可以直接使用我编译好的可执行程序:
  | 关闭屏幕 (保持投屏)                     | `Ctrl`+`o`                    | `Cmd`+`o`
  | 打开下拉菜单                           | `Ctrl`+`n`                    | `Cmd`+`n`
  | 关闭下拉菜单                           | `Ctrl`+`Shift`+`n`            | `Cmd`+`Shift`+`n`
- | 复制到剪切板                           | `Ctrl`+`c`                    | `Cmd`+`c`
- | 剪切到剪切板                           | `Ctrl`+`x`                    | `Cmd`+`x`
- | 同步剪切板并粘贴                       | `Ctrl`+`v`                    | `Cmd`+`v`
- | 注入电脑剪切板文本                     | `Ctrl`+`Shift`+`v`            | `Cmd`+`Shift`+`v`
+ | 复制到剪贴板                           | `Ctrl`+`c`                    | `Cmd`+`c`
+ | 剪切到剪贴板                           | `Ctrl`+`x`                    | `Cmd`+`x`
+ | 同步剪贴板并粘贴                       | `Ctrl`+`v`                    | `Cmd`+`v`
+ | 注入电脑剪贴板文本                     | `Ctrl`+`Shift`+`v`            | `Cmd`+`Shift`+`v`
 
 鼠标左键双击黑色区域可以去除黑色区域
 
@@ -274,14 +274,14 @@ Mac OS 平台，你可以直接使用我编译好的可执行程序:
 1. 学习Qt的过程中需要一个项目实战一下
 2. 本身具有音视频相关技能，对音视频很感兴趣
 3. 本身具有 Android 开发技能，好久没用有点生疏，需要巩固一下
-4. 发现了 Scrcpy，决定用新的技术栈（C++ + Qt + Opengl + FFmpeg）进行复刻
+4. 发现了 Scrcpy，决定用新的技术栈（C++ + Qt + OpenGL + FFmpeg）进行复刻
 
 
 ## 编译
 尽量提供了所有依赖资源，方便傻瓜式编译。
 
 ### QtScrcpy
-#### 非  Arch Linux
+#### 非 Arch Linux
 1. 使用官方 Qt Installer 或非官方工具（如 [aqt](https://github.com/miurahr/aqtinstall)）在目标平台上搭建Qt开发环境。
 需要 5.12 以上版本 Qt（在 Windows 上使用 MSVC 2019）
 2. 克隆该项目：`git clone --recurse-submodules git@github.com:barry-ran/QtScrcpy.git`

@@ -1,8 +1,8 @@
 ﻿#include <QApplication>
 #include <QDebug>
 #include <QFile>
-#ifdef Q_OS_LINUX
 #include <QFileInfo>
+#ifdef Q_OS_LINUX
 #include <QIcon>
 #endif
 #include <QSurfaceFormat>
@@ -55,6 +55,13 @@ int main(int argc, char *argv[])
         qputenv("QTSCRCPY_CONFIG_PATH", "../../../config");
     }
 #endif
+
+    // Prefer "<exe-dir>/config" when it exists, so config follows the executable folder.
+    const QString exeDir = QFileInfo(QString::fromLocal8Bit(argv[0])).absolutePath();
+    const QString exeConfigPath = exeDir + "/config";
+    if (QFileInfo(exeConfigPath).isDir()) {
+        qputenv("QTSCRCPY_CONFIG_PATH", exeConfigPath.toLocal8Bit());
+    }
 
     g_msgType = covertLogLevel(Config::getInstance().getLogLevel());
 

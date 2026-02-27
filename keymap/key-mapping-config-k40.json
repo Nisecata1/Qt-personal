@@ -1,10 +1,9 @@
 {
-  "comment":"进入战斗模式",
   "switchKey": "Key_QuoteLeft",
   "mouseMoveMap": {
     "type": "KMT_MOUSE_MOVE",
     "speedRatioX": 3,
-    "speedRatioY": 3,
+    "speedRatioY": 2,
     "startPos": {
       "x": 0.6,
       "y": 0.5
@@ -14,7 +13,7 @@
   },
   "keyMapNodes": [
     {
-      "comment":"移动方向键",
+      "comment": "移动方向键",
       "centerPos": {
         "x": 0.137,
         "y": 0.733
@@ -34,7 +33,7 @@
       "type": "KMT_STEER_WHEEL"
     },
     {
-      "comment":"呼出鼠标",
+      "comment": "呼出鼠标",
       "key": "Key_Alt",
       "pos": {
         "x": 0.155,
@@ -45,7 +44,6 @@
       "alwaysActive": true,
       "type": "KMT_CLICK"
     },
-
     {
       "key": "Key_Equal",
       "pos": {
@@ -58,7 +56,7 @@
       "type": "KMT_CLICK"
     },
     {
-      "comment":"跳跃",
+      "comment": "跳跃",
       "key": "Key_Space",
       "pos": {
         "x": 0.97,
@@ -69,11 +67,11 @@
       "type": "KMT_CLICK"
     },
     {
-      "comment":"小地图",
+      "comment": "小地图",
       "key": "Key_M",
       "pos": {
-        "x": 0.946,
-        "y": 0.131
+        "x": 0.9483,
+        "y": 0.1906
       },
       "resetMove": false,
       "switchMap": false,
@@ -114,15 +112,15 @@
       "comment": "弦化",
       "key": "Key_E",
       "pos": {
-        "x": 0.8887,
-        "y": 0.9118
+        "x": 0.8864,
+        "y": 0.9226
       },
       "resetMove": false,
       "switchMap": false,
       "type": "KMT_CLICK"
     },
     {
-      "comment":"更换弹夹",
+      "comment": "更换弹夹",
       "key": "Key_R",
       "pos": {
         "x": 0.831,
@@ -135,8 +133,8 @@
     {
       "key": "Key_F",
       "pos": {
-        "x": 0.667,
-        "y": 0.557
+        "x": 0.622,
+        "y": 0.4987
       },
       "resetMove": false,
       "switchMap": false,
@@ -155,8 +153,8 @@
     {
       "key": "Key_H",
       "pos": {
-        "x": 0.664,
-        "y": 0.692
+        "x": 0.6145,
+        "y": 0.6243
       },
       "resetMove": false,
       "switchMap": false,
@@ -165,8 +163,8 @@
     {
       "key": "Key_1",
       "pos": {
-        "x": 0.529,
-        "y": 0.906
+        "x": 0.5313,
+        "y": 0.8979
       },
       "resetMove": false,
       "switchMap": false,
@@ -175,8 +173,8 @@
     {
       "key": "Key_2",
       "pos": {
-        "x": 0.603,
-        "y": 0.905
+        "x": 0.6,
+        "y": 0.8982
       },
       "resetMove": false,
       "switchMap": false,
@@ -185,8 +183,8 @@
     {
       "key": "Key_3",
       "pos": {
-        "x": 0.642,
-        "y": 0.902
+        "x": 0.6481,
+        "y": 0.8857
       },
       "resetMove": false,
       "switchMap": false,
@@ -253,8 +251,8 @@
     {
       "key": "Key_F4",
       "pos": {
-        "x": 0.821,
-        "y": 0.049
+        "x": 0.8621,
+        "y": 0.0585
       },
       "resetMove": false,
       "switchMap": false,
@@ -308,8 +306,8 @@
     {
       "key": "LeftButton",
       "pos": {
-        "x": 0.889,
-        "y": 0.739
+        "x": 0.8898,
+        "y": 0.7485
       },
       "resetMove": false,
       "switchMap": false,
@@ -369,8 +367,8 @@
       "comment": "弦化",
       "key": "Key_Control",
       "pos": {
-        "x": 0.8885,
-        "y": 0.902
+        "x": 0.8961,
+        "y": 0.9277
       },
       "switchMap": false,
       "type": "KMT_CLICK"
@@ -379,13 +377,13 @@
       "comment": "副武器",
       "type": "KMT_CLICK",
       "pos": {
-        "x": 0.2449,
-        "y": 0.4336
+        "x": 0.2761,
+        "y": 0.542
       },
       "key": "ExtraButton2",
       "switchMap": false
     }
   ],
-  "width": 1291.2000732421875,
-  "height": 884.7999877929688
+  "width": 2559,
+  "height": 1439
 }

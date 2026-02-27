@@ -1,0 +1,14 @@
+这个文件夹里的只是默认值，实际上程序会优先读取 QtScrcpy.exe同级目录下的config文件夹
+
+因而配置会随程序目录一起移动。
+
+
+userdata.ini不能加注释，会覆盖
+
+
+# 顺滑程度，这个不用动，已经是最好的了
+MouseSmoothFrames=8
+
+
+# 缩放系数，也就是灵敏度，优先读设备[ZY22GD9HGN]的
+RelativeLookRawScale=30.0

@@ -1,0 +1,74 @@
+# scrcpy-server 说明（本项目定制版）
+
+本文档用于说明本目录下定制 `scrcpy-server` 的用途、构建方式和替换方法。
+
+## 1. 本目录文件说明
+
+- `scrcpy-server`：可直接替换使用的 server 二进制（本质是改名后的 APK）。
+- `scrcpy-server~new`：备份或中间产物（按你本地习惯保留）。
+- `scrcpy-server.zip`：打包备份。
+
+## 2. 这个定制 server 做了什么
+
+该定制版配合 Qt 客户端实现“无侵入式远端鼠标视觉反馈”：
+
+- 新增控制消息：`TYPE_INJECT_CURSOR = 0x80`
+  - 载荷：`x:int32, y:int32, w:int32, h:int32`（大端）
+  - `x < 0`（通常 `-1,-1,0,0`）表示隐藏光标层
+- 新增控制消息：`TYPE_SET_CURSOR_CONFIG = 0x81`
+  - 载荷：`cursorSizePx:int32`（大端）
+- Java 端通过 `SurfaceControl` 反射创建顶层透明图层绘制光标
+
+说明：如果你换回官方原版 server，这两条消息会不生效，远端光标不会显示/调尺寸。
+
+## 3. 什么时候需要重编 server
+
+需要重编 server 的情况：
+
+- 修改了 server Java 代码
+- 修改了 `0x80/0x81` 协议或光标图层行为
+
+不需要重编 server 的情况（仅重编 Qt 客户端即可）：
+
+- `RelativeLook*` 相关参数（如 `RelativeLookRawScale`）
+- 视角输入算法、平滑策略、窗口/鼠标行为
+- `config.ini` / `userdata.ini` 的客户端读取逻辑
+
+## 4. 标准构建基线
+
+- 上游基线提交：`10a0974f43cce259ba6c36346e3d962bf06e5259`
+- 推荐构建方式：Gradle（`./gradlew -p server assembleRelease`）
+
+## 5. GitHub Actions 最简构建流程（推荐）
+
+1. 在你的 `scrcpy` fork 切到基线提交。
+2. 应用补丁（例如仓库根目录的 `scrcpy_cursor_overlay.patch`）：
+   - `git apply --check scrcpy_cursor_overlay.patch`
+   - `git apply scrcpy_cursor_overlay.patch`
+3. 添加 workflow（`.github/workflows/build-server-only.yml`）并触发 `workflow_dispatch`。
+4. 构建完成后下载 artifact，得到 `server-release-unsigned.apk`。
+5. 将它重命名为 `scrcpy-server`。
+
+## 6. 在 QtScrcpy 中替换
+
+把新产物覆盖到：
+
+- `QtScrcpy/QtScrcpyCore/src/third_party/scrcpy-server`
+
+然后重编 QtScrcpy 并运行。
+
+## 7. 常见排查
+
+- 光标不显示：
+  - 先确认使用的是定制 server（不是官方原版）
+  - 再确认 `config.ini` 中 `RemoteCursorEnabled=true`
+- 改了光标大小无效：
+  - 确认 server 支持 `0x81`
+  - 确认发送的是 `CursorSizePx`（范围建议 `8..128`）
+- 视角灵敏度问题：
+  - 这是客户端链路，优先看 `userdata.ini` 的 `RelativeLook*` 和 keymap 的 `speedRatioX/Y`
+
+## 8. 备注
+
+本文件是给当前项目成员和后续 AI/开发者的“落地说明”。  
+如果你更新了协议、基线 commit 或构建脚本，请同步更新本文件。

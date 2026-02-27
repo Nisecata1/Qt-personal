@@ -181,6 +181,129 @@ Connect to your Android device on your computer, then run the program and click 
 
 Note: it is not necessary to keep your Android device connected via USB after you start adbd.
 
+## Configuration Reference (Important)
+
+This fork currently uses two INI files:
+
+- `config/config.ini` (global, mostly static app/runtime settings)
+- `config/userdata.ini` (user/session/device settings)
+
+### Config directory priority
+
+Runtime config directory is resolved in this order:
+
+1. `<QtScrcpy.exe dir>/config` (preferred)
+2. `QTSCRCPY_CONFIG_PATH` (if set and valid)
+3. fallback to `<QtScrcpy.exe dir>/config` as default target
+
+This means for packaged/portable usage, you should edit:
+
+- `output/x64/RelWithDebInfo/config/config.ini`
+- `output/x64/RelWithDebInfo/config/userdata.ini`
+
+### Important behavior rules
+
+- `config.ini` may contain comments (`; ...`).
+- `userdata.ini` should not contain comments (it is rewritten by `QSettings`; comments may be lost or become malformed keys).
+- `RelativeLookCoordMode` and `RelativeLookLogicalSize` are read from `[common]`.
+- `RelativeLookRawInput`, `RelativeLookSendHz`, `RelativeLookRawScale` support per-device override from `[<serial>]` (ADB serial section) with `[common]` fallback.
+- Effective `MaxFps` and `CodecName` are currently read from `userdata.ini:[common]` during server launch (not from `config.ini`).
+
+### `config.ini` keys (`[common]`)
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `Language` | `Auto` | `Auto`/`zh_CN`/`en_US`/`ja_JP` |
+| `WindowTitle` | `QtScrcpy` | Main window title |
+| `PushFilePath` | `/sdcard/` | Default push destination on device |
+| `ServerPath` | `/data/local/tmp/scrcpy-server.jar` | Remote server path on device |
+| `UseDesktopOpenGL` | `-1` | `-1` auto, `0` software, `1` OpenGLES, `2` Desktop OpenGL |
+| `UseSkin` (legacy) | `1` | Currently ignored in code (`Config::getSkin()` forces disabled) |
+| `RenderExpiredFrames` | `0` | Whether to render expired frames |
+| `AdbPath` | empty | Custom adb path |
+| `LogLevel` | `info` | `verbose`/`debug`/`info`/`warn`/`error` |
+| `CodecOptions` | empty | Encoder options passed to scrcpy server |
+| `RemoteCursorEnabled` | `false` | Remote cursor overlay switch (no-script path) |
+| `CursorSizePx` | `24` | Remote cursor size, clamped to `8..128` |
+| `MaxFps` (legacy) | `0` | Legacy location, currently overridden by `userdata.ini:[common]/MaxFps` at server start |
+| `CodecName` (legacy) | empty | Legacy location, currently overridden by `userdata.ini:[common]/CodecName` at server start |
+
+### `userdata.ini` keys
+
+#### `[General]` (auto-managed)
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `IpHistory` | empty | Saved wireless IP history |
+| `PortHistory` | empty | Saved wireless port history |
+
+#### `[common]` (global user settings)
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `RecordPath` | empty | Recording path |
+| `BitRate` | `2000000` | Video bitrate |
+| `MaxSizeIndex` | `2` | UI max-size combo index: `0=640,1=720,2=1080,3=1280,4=1920,5=original` |
+| `RecordFormatIndex` | `0` | `0=mp4,1=mkv` |
+| `LockDirectionIndex` | `0` | `0=no lock,1=0,2=90,3=180,4=270` |
+| `RecordScreen` | `false` | Record to file |
+| `RecordBackGround` | `false` | Background mode (no display window) |
+| `ReverseConnect` | `true` | Prefer `adb reverse` |
+| `ShowFPS` | `false` | Show FPS overlay |
+| `WindowOnTop` | `false` | Keep video window on top |
+| `AutoOffScreen` | `false` | Turn device screen off after start |
+| `FramelessWindow` | `false` | Frameless video window |
+| `KeepAlive` | `false` | Keep device awake |
+| `SimpleMode` | `false` | Single/simple mode toggle |
+| `AutoUpdateDevice` | `true` | Auto-refresh device list |
+| `showToolbar` | `true` | Show toolbar in video window |
+| `TrayMessageShown` | `false` | Internal tray hint state |
+| `MaxFps` | `120` (effective fallback at server start) | Effective location for FPS cap |
+| `CodecName` | empty | Effective location for explicit encoder name |
+| `AudioEnable` | `false` | If `false`, sends `audio=false` to scrcpy server |
+| `MouseSmoothFrames` | `4` | Mouse delta smoothing frames, clamped to `1..20` |
+| `RelativeLookCoordMode` | `logical` | `logical` or `video` |
+| `RelativeLookLogicalSize` | `65535` | Clamped to `4096..65535` |
+| `RelativeLookRawInput` | `true` | Windows Raw Input switch for relative-look path |
+| `RelativeLookSendHz` | `240` | Raw input dispatch Hz, clamped to `60..1000` |
+| `RelativeLookRawScale` | `12.0` | Raw delta scale, clamped to `0.1..50.0` |
+| `SteerWheelRecoverySpeed` | `0.45` | Clamped to `0.1..1.0` |
+| `SteerWheelRecoveryNoise` | `0.0020` | Clamped to `0.0..0.01` |
+| `SteerWheelRecoveryFinalNoise` | `0.0004` | Clamped to `0.0..0.005` |
+
+#### `[<serial>]` (device-specific section, `<serial>` is ADB serial)
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `WindowRectX` | `-1` | Stored window geometry |
+| `WindowRectY` | `-1` | Stored window geometry |
+| `WindowRectW` | `-1` | Stored window geometry |
+| `WindowRectH` | `-1` | Stored window geometry |
+| `NickName` | `Phone` | Custom device display name |
+| `RelativeLookRawInput` | fallback to `[common]` | Per-device override |
+| `RelativeLookSendHz` | fallback to `[common]` | Per-device override |
+| `RelativeLookRawScale` | fallback to `[common]` | Per-device override |
+
+### Hot-reload matrix
+
+| Setting | File | Reload behavior |
+| --- | --- | --- |
+| `RemoteCursorEnabled`, `CursorSizePx` | `config.ini` | Hot reload via `QFileSystemWatcher` + debounce (`120ms`) |
+| `RelativeLookRawInput`, `RelativeLookSendHz`, `RelativeLookRawScale` | `userdata.ini` | Hot reload via `QFileSystemWatcher` + debounce (`120ms`), applied immediately |
+| `RelativeLookCoordMode`, `RelativeLookLogicalSize` | `userdata.ini` | Polled reload in game input path (`~200ms` check interval) |
+| `SteerWheelRecovery*` | `userdata.ini` | Polled reload in game input path (`~80ms` check interval) |
+| `MouseSmoothFrames` | `userdata.ini` | Loaded once per input-converter lifecycle (reconnect device/app to guarantee refresh) |
+| `MaxFps`, `CodecName`, `AudioEnable` | `userdata.ini` | Applied when starting scrcpy server (restart service needed) |
+
+### Remote cursor feature requirements
+
+Remote cursor rendering relies on the patched server protocol and overlay implementation:
+
+- `TYPE_INJECT_CURSOR (0x80)`
+- `TYPE_SET_CURSOR_CONFIG (0x81)`
+
+If your `scrcpy-server` is not built from the patched sources, `RemoteCursorEnabled` and `CursorSizePx` will not have visible effect on device overlay.
+
 ## Interface button introduction：
 
 - Start config: function parameter settings before starting the service    
