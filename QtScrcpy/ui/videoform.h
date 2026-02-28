@@ -4,7 +4,9 @@
 #include <QFileSystemWatcher>
 #include <QPointF>
 #include <QPointer>
+#include <QProcess>
 #include <QTimer>
+#include <QUdpSocket>
 #include <QWidget>
 
 #include "../QtScrcpyCore/include/QtScrcpyCore.h"
@@ -46,6 +48,19 @@ private:
     void updateStyleSheet(bool vertical);
     QMargins getMargins(bool vertical);
     void initUI();
+    void loadVideoEnabledConfig();
+    void updateNoVideoOverlay();
+    void reloadViewControlSeparationConfig();
+    void initOrientationPoller();
+    void startOrientationPollingIfNeeded();
+    void stopOrientationPolling();
+    void probeOrientationAsync();
+    void handleOrientationProbeFinished(int exitCode, QProcess::ExitStatus status);
+    static bool parseSurfaceOrientationFromText(const QString &text, int &orientationOut);
+    QSize eventFrameSize() const;
+    QSize eventShowSize() const;
+    void initAiUdpReceiver();
+    void onAiUdpReadyRead();
     void centerCursorToVideoFrame();
     void initRelativeLookConfigWatcher();
     void ensureRelativeLookConfigWatchPath();
@@ -87,6 +102,7 @@ private:
     QPointer<QWidget> m_loadingWidget;
     QPointer<QYUVOpenGLWidget> m_videoWidget;
     QPointer<QLabel> m_fpsLabel;
+    QPointer<QLabel> m_noVideoLabel;
 
     //inside member
     QSize m_frameSize;
@@ -99,6 +115,14 @@ private:
 
     //Whether to display the toolbar when connecting a device.
     bool show_toolbar = true;
+    bool m_videoEnabled = true;
+    bool m_controlMapToScreen = false;
+    QSize m_streamFrameSize;
+    QTimer *m_orientationPollTimer = nullptr;
+    QPointer<QProcess> m_orientationProbeProcess;
+    QSize m_orientationBaseUiSize;
+    int m_orientationBaseValue = -1;
+    bool m_orientationBaseReady = false;
 
     bool m_cursorGrabbed = false;
     bool m_rawInputEnabled = true;
@@ -106,9 +130,13 @@ private:
     bool m_rawInputActive = false;
     int m_rawInputSendHz = 240;
     double m_rawInputScale = 12.0;
+    double m_recoilStrength = 0.0;
+    bool m_leftButtonDown = false;
     QPointF m_rawInputAccumDelta = QPointF(0.0, 0.0);
+    QPointF m_aiRawInputAccumDelta = QPointF(0.0, 0.0);
     QPointF m_rawInputVirtualPos = QPointF(0.0, 0.0);
     QTimer *m_rawInputSendTimer = nullptr;
+    QPointer<QUdpSocket> m_aiUdpSocket;
 
     QFileSystemWatcher *m_relativeLookConfigWatcher = nullptr;
     QTimer *m_relativeLookConfigDebounceTimer = nullptr;
@@ -119,3 +147,4 @@ private:
 };
 
 #endif // VIDEOFORM_H
+

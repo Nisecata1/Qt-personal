@@ -1,0 +1,114 @@
+#include <Mouse.h>
+
+
+// 定义引脚 (根据你的 RP2040-Zero/Pico 实际情况调整)
+// 通常 RP2040-Zero 的 Serial1 是 TX=0, RX=1
+#define PIN_SERIAL1_TX 0
+#define PIN_SERIAL1_RX 1
+
+
+const uint8_t HEAD = 0xA5;
+const uint8_t TAIL = 0x5A;
+const int PACKET_SIZE = 9;
+uint8_t buffer[PACKET_SIZE];
+
+
+// 缓存上一次发送的按键状态，用于去重
+uint8_t last_sent_buttons = 0;
+
+
+void setup() {
+  Mouse.begin();
+  
+  // 串口配置 (需与 Python 一致)
+  Serial1.setRX(1);
+  Serial1.setTX(0);
+
+  Serial1.begin(921600);
+}
+
+
+// [优化] 添加状态缓存，防止按住按键时重复发送 USB 报告
+uint8_t last_btn_flags = 0; 
+
+
+void loop() {
+  // 检查是否有完整包
+  if (Serial1.available() >= PACKET_SIZE) {
+    // 校验包头
+    if (Serial1.peek() != HEAD) {
+      Serial1.read(); // 错位修正，仅丢弃 1 字节，尝试对齐下一字节
+      return;
+    }
+    
+    // 读取数据
+    Serial1.readBytes(buffer, PACKET_SIZE);
+
+    // 校验包尾
+    if (buffer[8] == TAIL) {
+      // --- 1. 解析位移 ---
+      int16_t dx = (buffer[3] << 8) | buffer[2];
+      int16_t dy = (buffer[5] << 8) | buffer[4];
+      
+      // --- 2. 解析按键 ---
+      // Python发送的位掩码: 左(1), 右(2), 中(4), 侧1(8), 侧2(16)
+      uint8_t btn_flags = buffer[6];
+
+      // [核心优化] 仅在按键状态发生改变时才执行 Press/Release
+      // 这能极大减少 USB 通信量，解决按键连发导致的卡顿
+      if (btn_flags != last_btn_flags) {
+
+        // 处理左键 (Bit 0)
+        if (btn_flags & 0x01) Mouse.press(MOUSE_LEFT); 
+        else Mouse.release(MOUSE_LEFT);
+
+        // 处理右键 (Bit 1)
+        if (btn_flags & 0x02) Mouse.press(MOUSE_RIGHT); 
+        else Mouse.release(MOUSE_RIGHT);
+
+        // 处理中键 (Bit 2)
+        if (btn_flags & 0x04) Mouse.press(MOUSE_MIDDLE); 
+        else Mouse.release(MOUSE_MIDDLE);
+
+        // 处理侧键(无效)
+        // 注意：标准 Mouse.h 定义 MOUSE_LEFT=1, RIGHT=2, MIDDLE=4
+        // 这里的 8 和 16 是 HID 协议中的侧键标准值
+        
+        // if (btn_flags & 0x08) Mouse.press(8); 
+        // else Mouse.release(8);
+      
+        // if (btn_flags & 0x10) Mouse.press(16); 
+        // else Mouse.release(16);
+
+        // // 侧键1 (Bit 3)
+        // if (btn_flags & 0x08) Mouse.press(MOUSE_BACK); 
+        // else Mouse.release(MOUSE_BACK);
+      
+        // // 侧键2 (Bit 4)
+        // if (btn_flags & 0x10) Mouse.press(MOUSE_FORWARD); 
+        // else Mouse.release(MOUSE_FORWARD);
+
+
+        // 更新状态缓存
+        last_btn_flags = btn_flags;
+      }
+
+
+      // 解析滚轮 (索引 7，即 TAIL 之前的一位)
+      // 使用 int8_t 强制转换，因为滚轮有正负 (上滚/下滚)
+      int8_t wheel = (int8_t)buffer[7];
+
+
+      // --- 3. 执行移动 ---
+      // 只有当真正有位移时才调用 move，减少 USB 负载
+      // 注意：Mouse.press 会自动发送报告，所以即使不调用 move，按键也会生效
+      if (dx != 0 || dy != 0 || wheel != 0) {
+        // 将解析到的 wheel 传入第三个参数
+        Mouse.move(dx, dy, wheel);
+      }
+    } else {
+      // 校验失败，清空缓冲区防止乱码
+      // while(Serial1.available()) Serial1.read();
+    }
+  }
+}
