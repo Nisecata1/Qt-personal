@@ -24,6 +24,7 @@ struct UserBootConfig
     int lockOrientationIndex = 0;
     bool localTextInputEnabled = true;
     QString localTextInputShortcut = "Ctrl+Shift+T";
+    QString keymapEditorShortcut = "Ctrl+E";
     bool recordScreen     = false;
     bool recordBackground = false;
     bool reverseConnect   = true;
@@ -92,12 +93,8 @@ public:
     int getDeviceCenterCropSize(const QString &serial);
     void setDeviceCenterCropSize(const QString &serial, int cropSize);
     void clearDeviceCenterCropSize(const QString &serial);
-    bool hasDeviceMaxFpsOverride(const QString &serial);
-    int getDeviceMaxFpsOverride(const QString &serial);
-    void setDeviceMaxFpsOverride(const QString &serial, int fps);
-    void clearDeviceMaxFpsOverride(const QString &serial);
-    int getEffectiveMaxFps(const QString &serial);
     DeviceMouseConfig getDeviceMouseConfig(const QString &serial);
+    void ensureDeviceMouseConfigInitialized(const QString &serial);
     void setDeviceMouseConfig(const QString &serial, const DeviceMouseConfig &config);
 
     void deleteGroup(const QString &serial);

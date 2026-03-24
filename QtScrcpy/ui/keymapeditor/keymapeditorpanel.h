@@ -1,6 +1,7 @@
 #ifndef KEYMAPEDITORPANEL_H
 #define KEYMAPEDITORPANEL_H
 
+#include <QKeySequence>
 #include <QPointer>
 #include <QWidget>
 
@@ -17,6 +18,7 @@ class QLabel;
 class QFormLayout;
 class QShortcut;
 class QCloseEvent;
+class QKeyEvent;
 
 class KeymapEditorPanel : public QWidget
 {
@@ -29,6 +31,7 @@ public:
     void setSelectedNodeId(int nodeId);
     int selectedNodeId() const;
     void setScriptDisplayName(const QString &displayName);
+    void setCloseShortcut(const QKeySequence &shortcut);
 
 signals:
     void nodeSelected(int nodeId);
@@ -50,6 +53,7 @@ private:
     void setRecordingState(bool enabled, int nodeId = -1, KeymapEditorDocument::KeyBindingField field = KeymapEditorDocument::BindingPrimary, const QString &title = QString());
     void applyRecordedJsonKey(const QString &jsonKey);
     void updateRecordingButtons();
+    bool matchesCloseShortcut(const QKeyEvent *keyEvent) const;
     QString formatPointLabel(const QPointF &point) const;
     bool hasMouseMoveNode() const;
 
@@ -85,6 +89,7 @@ private:
     QPushButton *m_saveBtn = nullptr;
     QPushButton *m_discardBtn = nullptr;
     QShortcut *m_closeShortcut = nullptr;
+    QKeySequence m_closeKeySequence = QKeySequence(QStringLiteral("Ctrl+E"));
 };
 
 #endif // KEYMAPEDITORPANEL_H

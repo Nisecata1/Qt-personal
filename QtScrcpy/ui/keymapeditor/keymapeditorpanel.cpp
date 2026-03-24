@@ -53,11 +53,59 @@ QString bindingDisplayToolTip(const QString &bindingName)
     return QObject::tr("%1显示当前已绑定的按键或鼠标键，不能直接输入；请使用右侧“Record”重新录制。").arg(bindingName);
 }
 
-QString recordButtonToolTip(const QString &bindingName, bool listening)
+QKeySequence normalizeSingleShortcut(const QKeySequence &shortcut)
 {
-    return listening
-        ? QObject::tr("正在监听%1输入。按下任意键或鼠标键即可写入；按 Ctrl+E 可取消并关闭编辑器。").arg(bindingName)
-        : QObject::tr("开始录制%1。点击后会进入监听状态，等待下一次按键或鼠标输入。").arg(bindingName);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (shortcut.isEmpty() || shortcut[0] == QKeyCombination()) {
+        return QKeySequence();
+    }
+    return QKeySequence(shortcut[0]);
+#else
+    if (shortcut.isEmpty() || shortcut[0] == 0) {
+        return QKeySequence();
+    }
+    return QKeySequence(shortcut[0]);
+#endif
+}
+
+QString shortcutDisplayText(const QKeySequence &shortcut)
+{
+    return normalizeSingleShortcut(shortcut).toString(QKeySequence::NativeText).trimmed();
+}
+
+QString recordButtonToolTip(const QString &bindingName, bool listening, const QString &closeShortcutText)
+{
+    if (!listening) {
+        return QObject::tr("Start recording %1. The next key or mouse button input will be written into this binding.")
+            .arg(bindingName);
+    }
+
+    QString toolTip = QObject::tr("Listening for %1. Press any key or mouse button to record it.")
+        .arg(bindingName);
+    if (closeShortcutText.isEmpty()) {
+        toolTip += QObject::tr("\nNo editor-close shortcut is currently configured.");
+    } else {
+        toolTip += QObject::tr("\nPress %1 to cancel and close the editor.").arg(closeShortcutText);
+    }
+    return toolTip;
+}
+
+bool keyEventMatchesShortcut(const QKeyEvent *keyEvent, const QKeySequence &shortcut)
+{
+    if (!keyEvent) {
+        return false;
+    }
+
+    const QKeySequence normalized = normalizeSingleShortcut(shortcut);
+    if (normalized.isEmpty()) {
+        return false;
+    }
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return QKeySequence(keyEvent->keyCombination()) == normalized;
+#else
+    return QKeySequence(keyEvent->key() | keyEvent->modifiers()) == normalized;
+#endif
 }
 }
 
@@ -146,11 +194,11 @@ KeymapEditorPanel::KeymapEditorPanel(QWidget *parent)
     m_rightKeyEdit->setToolTip(bindingDisplayToolTip(tr("右方向键位")));
     m_upKeyEdit->setToolTip(bindingDisplayToolTip(tr("上方向键位")));
     m_downKeyEdit->setToolTip(bindingDisplayToolTip(tr("下方向键位")));
-    m_primaryRecordBtn->setToolTip(recordButtonToolTip(tr("主键位"), false));
-    m_leftRecordBtn->setToolTip(recordButtonToolTip(tr("左方向键位"), false));
-    m_rightRecordBtn->setToolTip(recordButtonToolTip(tr("右方向键位"), false));
-    m_upRecordBtn->setToolTip(recordButtonToolTip(tr("上方向键位"), false));
-    m_downRecordBtn->setToolTip(recordButtonToolTip(tr("下方向键位"), false));
+    m_primaryRecordBtn->setToolTip(recordButtonToolTip(tr("主键位"), false, QString()));
+    m_leftRecordBtn->setToolTip(recordButtonToolTip(tr("左方向键位"), false, QString()));
+    m_rightRecordBtn->setToolTip(recordButtonToolTip(tr("右方向键位"), false, QString()));
+    m_upRecordBtn->setToolTip(recordButtonToolTip(tr("上方向键位"), false, QString()));
+    m_downRecordBtn->setToolTip(recordButtonToolTip(tr("下方向键位"), false, QString()));
 
     m_androidKeySpin = new QSpinBox(this);
     m_androidKeySpin->setRange(0, 500);
@@ -250,12 +298,7 @@ KeymapEditorPanel::KeymapEditorPanel(QWidget *parent)
     connect(m_saveBtn, &QPushButton::clicked, this, &KeymapEditorPanel::saveRequested);
     connect(m_discardBtn, &QPushButton::clicked, this, &KeymapEditorPanel::discardRequested);
 
-    m_closeShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+E")), this);
-    m_closeShortcut->setAutoRepeat(false);
-    connect(m_closeShortcut, &QShortcut::activated, this, [this]() {
-        setRecordingState(false);
-        emit closeRequested();
-    });
+    setCloseShortcut(m_closeKeySequence);
 
     connect(&ThemeManager::getInstance(), &ThemeManager::themeChanged, this, [this]() {
         applyTheme();
@@ -318,6 +361,27 @@ void KeymapEditorPanel::setScriptDisplayName(const QString &displayName)
     setWindowTitle(title);
 }
 
+void KeymapEditorPanel::setCloseShortcut(const QKeySequence &shortcut)
+{
+    m_closeKeySequence = normalizeSingleShortcut(shortcut);
+
+    if (m_closeShortcut) {
+        delete m_closeShortcut;
+        m_closeShortcut = nullptr;
+    }
+
+    if (!m_closeKeySequence.isEmpty()) {
+        m_closeShortcut = new QShortcut(m_closeKeySequence, this);
+        m_closeShortcut->setAutoRepeat(false);
+        connect(m_closeShortcut, &QShortcut::activated, this, [this]() {
+            setRecordingState(false);
+            emit closeRequested();
+        });
+    }
+
+    updateRecordingButtons();
+}
+
 bool KeymapEditorPanel::eventFilter(QObject *watched, QEvent *event)
 {
     Q_UNUSED(watched)
@@ -328,7 +392,7 @@ bool KeymapEditorPanel::eventFilter(QObject *watched, QEvent *event)
     switch (event->type()) {
     case QEvent::ShortcutOverride: {
         QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
-        if (keyEvent && keyEvent->key() == Qt::Key_E && (keyEvent->modifiers() & Qt::ControlModifier)) {
+        if (matchesCloseShortcut(keyEvent)) {
             event->accept();
             return false;
         }
@@ -337,7 +401,7 @@ bool KeymapEditorPanel::eventFilter(QObject *watched, QEvent *event)
     }
     case QEvent::KeyPress: {
         QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
-        if (keyEvent && keyEvent->key() == Qt::Key_E && (keyEvent->modifiers() & Qt::ControlModifier)) {
+        if (matchesCloseShortcut(keyEvent)) {
             setRecordingState(false);
             emit closeRequested();
             event->accept();
@@ -548,11 +612,17 @@ void KeymapEditorPanel::updateRecordingButtons()
     m_upRecordBtn->setText(upListening ? QStringLiteral("Listening...") : idleText);
     m_downRecordBtn->setText(downListening ? QStringLiteral("Listening...") : idleText);
 
-    m_primaryRecordBtn->setToolTip(recordButtonToolTip(tr("主键位"), primaryListening));
-    m_leftRecordBtn->setToolTip(recordButtonToolTip(tr("左方向键位"), leftListening));
-    m_rightRecordBtn->setToolTip(recordButtonToolTip(tr("右方向键位"), rightListening));
-    m_upRecordBtn->setToolTip(recordButtonToolTip(tr("上方向键位"), upListening));
-    m_downRecordBtn->setToolTip(recordButtonToolTip(tr("下方向键位"), downListening));
+    const QString closeShortcutText = shortcutDisplayText(m_closeKeySequence);
+    m_primaryRecordBtn->setToolTip(recordButtonToolTip(tr("主键位"), primaryListening, closeShortcutText));
+    m_leftRecordBtn->setToolTip(recordButtonToolTip(tr("左方向键位"), leftListening, closeShortcutText));
+    m_rightRecordBtn->setToolTip(recordButtonToolTip(tr("右方向键位"), rightListening, closeShortcutText));
+    m_upRecordBtn->setToolTip(recordButtonToolTip(tr("上方向键位"), upListening, closeShortcutText));
+    m_downRecordBtn->setToolTip(recordButtonToolTip(tr("下方向键位"), downListening, closeShortcutText));
+}
+
+bool KeymapEditorPanel::matchesCloseShortcut(const QKeyEvent *keyEvent) const
+{
+    return keyEventMatchesShortcut(keyEvent, m_closeKeySequence);
 }
 
 QString KeymapEditorPanel::formatPointLabel(const QPointF &point) const

@@ -27,6 +27,7 @@ class VideoForm;
 class QCheckBox;
 class QComboBox;
 class QGroupBox;
+class QKeySequenceEdit;
 class QLabel;
 class QSpinBox;
 class QToolButton;
@@ -68,6 +69,7 @@ private slots:
     void on_recordScreenCheck_clicked(bool checked);
     void on_localTextInputCheck_toggled(bool checked);
     void on_localTextInputShortcutEdit_keySequenceChanged(const QKeySequence &keySequence);
+    void on_keymapEditorShortcutEdit_keySequenceChanged(const QKeySequence &keySequence);
     void on_usbConnectBtn_clicked();
     void on_wifiConnectBtn_clicked();
     void on_connectedPhoneList_itemDoubleClicked(QListWidgetItem *item);
@@ -85,15 +87,14 @@ private slots:
 
     void showIpEditMenu(const QPoint &pos);
     void onSelectedDeviceMouseConfigEdited();
-    void onSelectedDeviceMaxFpsConfigEdited();
     void onSelectedDeviceCenterCropConfigEdited();
-    void onGlobalMaxFpsValueChanged(int value);
     void onThemeModeChanged(int index);
 
 private:
     bool checkAdbRun();
     void initUI();
-    void initSelectedDeviceConfigUi();
+    void initGameFeatureUi();
+    void initUsbMouseConfigUi();
     void updateBootConfig(bool toView = true);
     void execAdbCmd();
     void delayMs(int ms);
@@ -105,12 +106,14 @@ private:
     qsc::DeviceParams buildDeviceParams(const QString &serial);
     const QString &getServerPath();
     void applyLocalTextInputConfigToOpenVideoForms();
+    void applyKeymapEditorShortcutToOpenVideoForms();
     void updateVideoFormScriptBinding(const QString &serial, const QString &scriptFilePath, const QString &scriptDisplayName, const QString &scriptJson);
     void loadIpHistory();
     void saveIpHistory(const QString &ip);
     void loadPortHistory();
     void savePortHistory(const QString &port);
     void restartApplication();
+    void quitApplicationDirectly();
     void showPortEditMenu(const QPoint &pos);
     void handleSelectedSerialChanged(const QString &serial);
     void initControlToolTips();
@@ -119,7 +122,6 @@ private:
     void updateSelectedDeviceConfigControlState();
     void setMouseConfigExpanded(bool expanded);
     void saveSelectedDeviceMouseConfig();
-    void saveSelectedDeviceMaxFpsConfig();
     void saveSelectedDeviceCenterCropConfig();
     int currentAutoUpdateIntervalSec() const;
     int currentAutoUpdateIntervalMs() const;
@@ -127,9 +129,11 @@ private:
     void refreshAutoUpdateToolTips();
     QString buildRecordPathToolTip() const;
     QString buildLocalTextInputShortcutToolTip() const;
+    QString buildKeymapEditorShortcutToolTip() const;
     QString buildDeviceIpToolTip() const;
     QString buildDevicePortToolTip() const;
     QString buildMouseConfigToggleToolTip() const;
+    QKeySequence currentKeymapEditorShortcut() const;
     ThemeMode currentThemeModeSelection() const;
     QString currentSelectedSerial() const;
     QString formatSelectedDeviceDisplayName(const QString &serial) const;
@@ -149,12 +153,13 @@ private:
     QTimer m_autoUpdatetimer;
     QHash<QString, QPointer<VideoForm>> m_videoForms;
     QComboBox *m_themeModeBox = nullptr;
-    QGroupBox *m_selectedDeviceConfigGroup = nullptr;
+    QGroupBox *m_gameFeatureGroup = nullptr;
+    QGroupBox *m_gameDeviceConfigGroup = nullptr;
+    QLabel *m_gameSelectedDeviceSerialValue = nullptr;
+    QKeySequenceEdit *m_keymapEditorShortcutEdit = nullptr;
     QLabel *m_selectedDeviceSerialValue = nullptr;
     QCheckBox *m_deviceCenterCropCheck = nullptr;
     QSpinBox *m_deviceCenterCropSizeSpin = nullptr;
-    QSpinBox *m_deviceMaxFpsSpin = nullptr;
-    QCheckBox *m_deviceMaxFpsOverrideCheck = nullptr;
     QToolButton *m_mouseConfigToggleBtn = nullptr;
     QWidget *m_mouseConfigContent = nullptr;
     QCheckBox *m_renderRemoteCursorCheck = nullptr;

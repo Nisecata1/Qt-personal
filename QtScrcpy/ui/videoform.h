@@ -41,6 +41,7 @@ public:
     void setSerial(const QString& serial);
     void setInitialOrientationHint(int orientation);
     void setLocalTextInputConfig(bool enabled, const QKeySequence &shortcut);
+    void setKeymapEditorShortcut(const QKeySequence &shortcut);
     void setScriptBinding(const QString &filePath, const QString &displayName, const QString &json);
     QRect getGrabCursorRect();
     const QSize &frameSize();
@@ -200,6 +201,7 @@ private:
     int m_pendingInitialOrientation = -1;
     bool m_localTextInputEnabled = true;
     QKeySequence m_localTextInputKeySequence = QKeySequence(QStringLiteral("Ctrl+Shift+T"));
+    QKeySequence m_keymapEditorKeySequence = QKeySequence(QStringLiteral("Ctrl+E"));
 
     bool m_cursorGrabbed = false;
     bool m_rawInputEnabled = true;

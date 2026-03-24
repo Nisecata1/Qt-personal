@@ -79,6 +79,9 @@
 #define COMMON_LOCAL_TEXT_INPUT_SHORTCUT_KEY "LocalTextInputShortcut"
 #define COMMON_LOCAL_TEXT_INPUT_SHORTCUT_DEF "Ctrl+Shift+T"
 
+#define COMMON_KEYMAP_EDITOR_SHORTCUT_KEY "KeymapEditorShortcut"
+#define COMMON_KEYMAP_EDITOR_SHORTCUT_DEF "Ctrl+E"
+
 #define COMMON_RECORD_SCREEN_KEY "RecordScreen"
 #define COMMON_RECORD_SCREEN_DEF false
 
@@ -138,11 +141,6 @@
 #define SERIAL_NORMAL_MOUSE_CURSOR_FLUSH_INTERVAL_MS_KEY "NormalMouseCursorFlushIntervalMs"
 #define SERIAL_NORMAL_MOUSE_CURSOR_CLICK_SUPPRESSION_MS_KEY "NormalMouseCursorClickSuppressionMs"
 #define SERIAL_NORMAL_MOUSE_TAP_MIN_HOLD_MS_KEY "NormalMouseTapMinHoldMs"
-
-#define COMMON_REMOTE_CURSOR_ENABLED_KEY "RemoteCursorEnabled"
-#define COMMON_REMOTE_CURSOR_ENABLED_DEF false
-#define COMMON_CURSOR_SIZE_PX_KEY "CursorSizePx"
-#define COMMON_CURSOR_SIZE_PX_DEF 24
 
 // IP history
 #define IP_HISTORY_KEY "IpHistory"
@@ -248,6 +246,19 @@ ThemeMode themeModeFromVariant(const QVariant &value)
     }
     return ThemeMode::System;
 }
+
+bool hasCompleteDeviceMouseConfig(QSettings *settings)
+{
+    return settings
+        && settings->contains(SERIAL_REMOTE_CURSOR_ENABLED_KEY)
+        && settings->contains(SERIAL_CURSOR_SIZE_PX_KEY)
+        && settings->contains(SERIAL_NORMAL_MOUSE_COMPAT_ENABLED_KEY)
+        && settings->contains(SERIAL_NORMAL_MOUSE_TOUCH_PRIORITY_ENABLED_KEY)
+        && settings->contains(SERIAL_NORMAL_MOUSE_CURSOR_THROTTLE_ENABLED_KEY)
+        && settings->contains(SERIAL_NORMAL_MOUSE_CURSOR_FLUSH_INTERVAL_MS_KEY)
+        && settings->contains(SERIAL_NORMAL_MOUSE_CURSOR_CLICK_SUPPRESSION_MS_KEY)
+        && settings->contains(SERIAL_NORMAL_MOUSE_TAP_MIN_HOLD_MS_KEY);
+}
 }
 
 Config::Config(QObject *parent) : QObject(parent)
@@ -323,6 +334,7 @@ void Config::setUserBootConfig(const UserBootConfig &config)
     m_userData->setValue(COMMON_LOCK_ORIENTATION_INDEX_KEY, config.lockOrientationIndex);
     m_userData->setValue(COMMON_LOCAL_TEXT_INPUT_ENABLED_KEY, config.localTextInputEnabled);
     m_userData->setValue(COMMON_LOCAL_TEXT_INPUT_SHORTCUT_KEY, config.localTextInputShortcut);
+    m_userData->setValue(COMMON_KEYMAP_EDITOR_SHORTCUT_KEY, config.keymapEditorShortcut);
     m_userData->setValue(COMMON_RECORD_SCREEN_KEY, config.recordScreen);
     m_userData->setValue(COMMON_RECORD_BACKGROUD_KEY, config.recordBackground);
     m_userData->setValue(COMMON_REVERSE_CONNECT_KEY, config.reverseConnect);
@@ -350,6 +362,7 @@ UserBootConfig Config::getUserBootConfig()
     config.lockOrientationIndex = m_userData->value(COMMON_LOCK_ORIENTATION_INDEX_KEY, COMMON_LOCK_ORIENTATION_INDEX_DEF).toInt();
     config.localTextInputEnabled = m_userData->value(COMMON_LOCAL_TEXT_INPUT_ENABLED_KEY, COMMON_LOCAL_TEXT_INPUT_ENABLED_DEF).toBool();
     config.localTextInputShortcut = m_userData->value(COMMON_LOCAL_TEXT_INPUT_SHORTCUT_KEY, COMMON_LOCAL_TEXT_INPUT_SHORTCUT_DEF).toString();
+    config.keymapEditorShortcut = m_userData->value(COMMON_KEYMAP_EDITOR_SHORTCUT_KEY, COMMON_KEYMAP_EDITOR_SHORTCUT_DEF).toString();
     config.framelessWindow = m_userData->value(COMMON_FRAMELESS_WINDOW_KEY, COMMON_FRAMELESS_WINDOW_DEF).toBool();
     config.recordScreen = m_userData->value(COMMON_RECORD_SCREEN_KEY, COMMON_RECORD_SCREEN_DEF).toBool();
     config.recordBackground = m_userData->value(COMMON_RECORD_BACKGROUD_KEY, COMMON_RECORD_BACKGROUD_DEF).toBool();
@@ -483,90 +496,9 @@ void Config::clearDeviceCenterCropSize(const QString &serial)
     m_userData->sync();
 }
 
-bool Config::hasDeviceMaxFpsOverride(const QString &serial)
-{
-    const QString trimmedSerial = serial.trimmed();
-    if (trimmedSerial.isEmpty()) {
-        return false;
-    }
-
-    m_userData->beginGroup(trimmedSerial);
-    const bool hasOverride = m_userData->contains(COMMON_MAX_FPS_KEY);
-    m_userData->endGroup();
-    return hasOverride;
-}
-
-int Config::getDeviceMaxFpsOverride(const QString &serial)
-{
-    const QString trimmedSerial = serial.trimmed();
-    if (trimmedSerial.isEmpty()) {
-        return 0;
-    }
-
-    m_userData->beginGroup(trimmedSerial);
-    bool intOk = false;
-    int fps = m_userData->value(COMMON_MAX_FPS_KEY, 0).toInt(&intOk);
-    m_userData->endGroup();
-    if (!intOk) {
-        fps = 0;
-    }
-    return qBound(0, fps, 240);
-}
-
-void Config::setDeviceMaxFpsOverride(const QString &serial, int fps)
-{
-    const QString trimmedSerial = serial.trimmed();
-    if (trimmedSerial.isEmpty()) {
-        return;
-    }
-
-    m_userData->beginGroup(trimmedSerial);
-    m_userData->setValue(COMMON_MAX_FPS_KEY, qBound(0, fps, 240));
-    m_userData->endGroup();
-    m_userData->sync();
-}
-
-void Config::clearDeviceMaxFpsOverride(const QString &serial)
-{
-    const QString trimmedSerial = serial.trimmed();
-    if (trimmedSerial.isEmpty()) {
-        return;
-    }
-
-    m_userData->beginGroup(trimmedSerial);
-    m_userData->remove(COMMON_MAX_FPS_KEY);
-    m_userData->endGroup();
-    m_userData->sync();
-}
-
-int Config::getEffectiveMaxFps(const QString &serial)
-{
-    if (hasDeviceMaxFpsOverride(serial)) {
-        return getDeviceMaxFpsOverride(serial);
-    }
-    return getGlobalMaxFps();
-}
-
 DeviceMouseConfig Config::getDeviceMouseConfig(const QString &serial)
 {
     DeviceMouseConfig config;
-
-    m_settings->beginGroup(GROUP_COMMON);
-    bool boolOk = false;
-    config.remoteCursorEnabled = parseBoolSetting(m_settings->value(COMMON_REMOTE_CURSOR_ENABLED_KEY,
-                                                                    COMMON_REMOTE_CURSOR_ENABLED_DEF),
-                                                  COMMON_REMOTE_CURSOR_ENABLED_DEF,
-                                                  &boolOk);
-    if (!boolOk) {
-        config.remoteCursorEnabled = COMMON_REMOTE_CURSOR_ENABLED_DEF;
-    }
-
-    bool intOk = false;
-    config.cursorSizePx = m_settings->value(COMMON_CURSOR_SIZE_PX_KEY, COMMON_CURSOR_SIZE_PX_DEF).toInt(&intOk);
-    if (!intOk) {
-        config.cursorSizePx = COMMON_CURSOR_SIZE_PX_DEF;
-    }
-    m_settings->endGroup();
 
     const QString trimmedSerial = serial.trimmed();
     if (trimmedSerial.isEmpty()) {
@@ -575,6 +507,7 @@ DeviceMouseConfig Config::getDeviceMouseConfig(const QString &serial)
     }
 
     m_userData->beginGroup(trimmedSerial);
+    bool intOk = false;
 
     QVariant value = m_userData->value(SERIAL_REMOTE_CURSOR_ENABLED_KEY);
     if (value.isValid()) {
@@ -635,6 +568,24 @@ DeviceMouseConfig Config::getDeviceMouseConfig(const QString &serial)
     config.normalMouseCursorClickSuppressionMs = qBound(0, config.normalMouseCursorClickSuppressionMs, 300);
     config.normalMouseTapMinHoldMs = qBound(0, config.normalMouseTapMinHoldMs, 40);
     return config;
+}
+
+void Config::ensureDeviceMouseConfigInitialized(const QString &serial)
+{
+    const QString trimmedSerial = serial.trimmed();
+    if (trimmedSerial.isEmpty()) {
+        return;
+    }
+
+    const DeviceMouseConfig config = getDeviceMouseConfig(trimmedSerial);
+
+    m_userData->beginGroup(trimmedSerial);
+    const bool initialized = hasCompleteDeviceMouseConfig(m_userData);
+    m_userData->endGroup();
+
+    if (!initialized) {
+        setDeviceMouseConfig(trimmedSerial, config);
+    }
 }
 
 void Config::setDeviceMouseConfig(const QString &serial, const DeviceMouseConfig &config)

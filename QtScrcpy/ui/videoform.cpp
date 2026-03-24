@@ -594,6 +594,43 @@ void VideoForm::setLocalTextInputConfig(bool enabled, const QKeySequence &shortc
     updateKeymapEditorShortcutStates();
 }
 
+void VideoForm::setKeymapEditorShortcut(const QKeySequence &shortcut)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_keymapEditorKeySequence = (shortcut.isEmpty() || shortcut[0] == QKeyCombination())
+        ? QKeySequence()
+        : QKeySequence(shortcut[0]);
+#else
+    m_keymapEditorKeySequence = (shortcut.isEmpty() || shortcut[0] == 0)
+        ? QKeySequence()
+        : QKeySequence(shortcut[0]);
+#endif
+
+    if (m_toggleKeymapEditorShortcut) {
+        delete m_toggleKeymapEditorShortcut.data();
+        m_toggleKeymapEditorShortcut = nullptr;
+    }
+
+    if (!m_keymapEditorKeySequence.isEmpty()) {
+        auto *shortcutObj = new QShortcut(m_keymapEditorKeySequence, this);
+        shortcutObj->setAutoRepeat(false);
+        connect(shortcutObj, &QShortcut::activated, this, [this]() {
+            if (isKeymapEditorActive()) {
+                shutdownKeymapEditor(true);
+            } else {
+                enterKeymapEditor();
+            }
+        });
+        m_toggleKeymapEditorShortcut = shortcutObj;
+    }
+
+    if (m_keymapEditorPanel) {
+        m_keymapEditorPanel->setCloseShortcut(m_keymapEditorKeySequence);
+    }
+
+    updateKeymapEditorShortcutStates();
+}
+
 void VideoForm::setScriptBinding(const QString &filePath, const QString &displayName, const QString &json)
 {
     m_scriptFilePath = filePath;
@@ -851,17 +888,7 @@ void VideoForm::installShortcut()
         }
     });
 
-    m_toggleKeymapEditorShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+E")), this);
-    m_toggleKeymapEditorShortcut->setAutoRepeat(false);
-    connect(m_toggleKeymapEditorShortcut, &QShortcut::activated, this, [this]() {
-        if (isKeymapEditorActive()) {
-            shutdownKeymapEditor(true);
-        } else {
-            enterKeymapEditor();
-        }
-    });
-
-    updateKeymapEditorShortcutStates();
+    setKeymapEditorShortcut(m_keymapEditorKeySequence);
 }
 
 void VideoForm::ensureKeymapEditorUi()
@@ -901,6 +928,7 @@ void VideoForm::ensureKeymapEditorUi()
 
     m_keymapEditorOverlay->setDocument(m_keymapEditorDocument);
     m_keymapEditorPanel->setDocument(m_keymapEditorDocument);
+    m_keymapEditorPanel->setCloseShortcut(m_keymapEditorKeySequence);
 }
 
 void VideoForm::positionKeymapEditorUi()

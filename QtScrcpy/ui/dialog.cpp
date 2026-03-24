@@ -17,6 +17,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QToolButton>
@@ -46,6 +47,21 @@ void setComboAndLineEditToolTip(QComboBox *comboBox, const QString &toolTip)
     if (comboBox->lineEdit()) {
         comboBox->lineEdit()->setToolTip(toolTip);
     }
+}
+
+QKeySequence normalizeSingleShortcut(const QKeySequence &shortcut)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (shortcut.isEmpty() || shortcut[0] == QKeyCombination()) {
+        return QKeySequence();
+    }
+    return QKeySequence(shortcut[0]);
+#else
+    if (shortcut.isEmpty() || shortcut[0] == 0) {
+        return QKeySequence();
+    }
+    return QKeySequence(shortcut[0]);
+#endif
 }
 }
 
@@ -203,10 +219,7 @@ Dialog::Dialog(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
     m_hideIcon->show();
     connect(m_showWindow, &QAction::triggered, this, &Dialog::show);
     connect(m_restart, &QAction::triggered, this, &Dialog::restartApplication);
-    connect(m_quit, &QAction::triggered, this, [this]() {
-        m_hideIcon->hide();
-        qApp->quit();
-    });
+    connect(m_quit, &QAction::triggered, this, &Dialog::quitApplicationDirectly);
     connect(m_hideIcon, &QSystemTrayIcon::activated, this, &Dialog::slotActivated);
 
     connect(&qsc::IDeviceManage::getInstance(), &qsc::IDeviceManage::deviceConnected, this, &Dialog::onDeviceConnected);
@@ -291,17 +304,22 @@ void Dialog::initUI()
         m_themeModeBox->addItem(tr("深色"), static_cast<int>(ThemeMode::Dark));
         m_themeModeBox->setToolTip(tr("切换整个应用的主题外观，可选择跟随系统、浅色或深色。"));
         themeLabel->setBuddy(m_themeModeBox);
+        auto *quitButton = new QPushButton(tr("退出程序"), themeWidget);
+        quitButton->setObjectName(QStringLiteral("quitApplicationBtn"));
+        quitButton->setAutoDefault(false);
+        quitButton->setToolTip(tr("直接退出应用，不隐藏到托盘。"));
 
         themeLayout->addWidget(themeLabel);
         themeLayout->addWidget(m_themeModeBox);
         themeLayout->addStretch(1);
+        themeLayout->addWidget(quitButton);
         configLayout->insertWidget(0, themeWidget);
+
+        connect(quitButton, &QPushButton::clicked, this, &Dialog::quitApplicationDirectly);
     }
 
     connect(ui->serialBox, &QComboBox::currentTextChanged,
             this, &Dialog::handleSelectedSerialChanged);
-    connect(ui->maxFpsSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
-            this, &Dialog::onGlobalMaxFpsValueChanged);
     if (m_themeModeBox) {
         connect(m_themeModeBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
                 this, &Dialog::onThemeModeChanged);
@@ -312,29 +330,138 @@ void Dialog::initUI()
 #endif
     });
 
-    initSelectedDeviceConfigUi();
+    initGameFeatureUi();
+    initUsbMouseConfigUi();
     initControlToolTips();
     handleSelectedSerialChanged(currentSelectedSerial());
     refreshControlToolTips();
 }
 
-void Dialog::initSelectedDeviceConfigUi()
+void Dialog::initGameFeatureUi()
 {
-    if (m_selectedDeviceConfigGroup) {
+    if (m_gameFeatureGroup) {
         return;
     }
 
     auto rightLayout = qobject_cast<QVBoxLayout *>(ui->rightWidget->layout());
+    auto configLayout = qobject_cast<QVBoxLayout *>(ui->configGroupBox->layout());
     if (!rightLayout) {
         return;
     }
 
-    m_selectedDeviceConfigGroup = new QGroupBox(tr("设备独有板块"), ui->rightWidget);
-    m_selectedDeviceConfigGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    m_gameFeatureGroup = new QGroupBox(tr("游戏功能"), ui->rightWidget);
+    m_gameFeatureGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 
-    auto groupLayout = new QVBoxLayout(m_selectedDeviceConfigGroup);
+    auto *groupLayout = new QVBoxLayout(m_gameFeatureGroup);
     groupLayout->setContentsMargins(5, 5, 5, 5);
     groupLayout->setSpacing(4);
+
+    if (configLayout && ui->configWidget4) {
+        configLayout->removeWidget(ui->configWidget4);
+        ui->configWidget4->setParent(m_gameFeatureGroup);
+        groupLayout->addWidget(ui->configWidget4);
+    }
+
+    auto *shortcutWidget = new QWidget(m_gameFeatureGroup);
+    auto *shortcutLayout = new QHBoxLayout(shortcutWidget);
+    shortcutLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto *shortcutLabel = new QLabel(tr("键位编辑热键："), shortcutWidget);
+    m_keymapEditorShortcutEdit = new QKeySequenceEdit(shortcutWidget);
+    m_keymapEditorShortcutEdit->setObjectName(QStringLiteral("keymapEditorShortcutEdit"));
+    m_keymapEditorShortcutEdit->setKeySequence(QKeySequence(QStringLiteral("Ctrl+E")));
+    shortcutLabel->setBuddy(m_keymapEditorShortcutEdit);
+
+    shortcutLayout->addWidget(shortcutLabel);
+    shortcutLayout->addWidget(m_keymapEditorShortcutEdit, 1);
+    groupLayout->addWidget(shortcutWidget);
+
+    m_gameDeviceConfigGroup = new QGroupBox(tr("设备独有配置"), m_gameFeatureGroup);
+    m_gameDeviceConfigGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+
+    auto *deviceGroupLayout = new QVBoxLayout(m_gameDeviceConfigGroup);
+    deviceGroupLayout->setContentsMargins(5, 5, 5, 5);
+    deviceGroupLayout->setSpacing(4);
+
+    auto *selectedDeviceRow = new QHBoxLayout();
+    selectedDeviceRow->setContentsMargins(0, 0, 0, 0);
+    selectedDeviceRow->addWidget(new QLabel(tr("当前设备："), m_gameDeviceConfigGroup));
+    m_gameSelectedDeviceSerialValue = new QLabel(tr("未选择设备"), m_gameDeviceConfigGroup);
+    m_gameSelectedDeviceSerialValue->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    selectedDeviceRow->addWidget(m_gameSelectedDeviceSerialValue, 1);
+    deviceGroupLayout->addLayout(selectedDeviceRow);
+
+    auto *deviceCenterCropRow = new QHBoxLayout();
+    deviceCenterCropRow->setContentsMargins(0, 0, 0, 0);
+    m_deviceCenterCropCheck = new QCheckBox(tr("center crop"), m_gameDeviceConfigGroup);
+    deviceCenterCropRow->addWidget(m_deviceCenterCropCheck);
+    deviceCenterCropRow->addStretch(1);
+
+    auto *deviceCenterCropLabel = new QLabel(tr("crop size:"), m_gameDeviceConfigGroup);
+    deviceCenterCropRow->addWidget(deviceCenterCropLabel);
+
+    m_deviceCenterCropSizeSpin = new QSpinBox(m_gameDeviceConfigGroup);
+    m_deviceCenterCropSizeSpin->setRange(2, 4096);
+    m_deviceCenterCropSizeSpin->setSingleStep(2);
+    m_deviceCenterCropSizeSpin->setValue(256);
+    m_deviceCenterCropSizeSpin->setEnabled(false);
+    deviceCenterCropLabel->setBuddy(m_deviceCenterCropSizeSpin);
+    deviceCenterCropRow->addWidget(m_deviceCenterCropSizeSpin);
+    deviceGroupLayout->addLayout(deviceCenterCropRow);
+
+    groupLayout->addWidget(m_gameDeviceConfigGroup);
+
+    connect(m_keymapEditorShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
+            this, &Dialog::on_keymapEditorShortcutEdit_keySequenceChanged);
+    connect(m_deviceCenterCropCheck, &QCheckBox::toggled,
+            this, &Dialog::onSelectedDeviceCenterCropConfigEdited);
+    connect(m_deviceCenterCropSizeSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+            this, &Dialog::onSelectedDeviceCenterCropConfigEdited);
+
+    rightLayout->insertWidget(1, m_gameFeatureGroup);
+}
+
+void Dialog::initUsbMouseConfigUi()
+{
+    if (m_mouseConfigToggleBtn || m_mouseConfigContent) {
+        return;
+    }
+
+    auto usbLayout = qobject_cast<QVBoxLayout *>(ui->usbGroupBox->layout());
+    if (!usbLayout) {
+        return;
+    }
+
+    m_mouseConfigToggleBtn = new QToolButton(ui->usbGroupBox);
+    m_mouseConfigToggleBtn->setText(tr("鼠标显示设置"));
+    m_mouseConfigToggleBtn->setCheckable(true);
+    m_mouseConfigToggleBtn->setChecked(false);
+    m_mouseConfigToggleBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_mouseConfigToggleBtn->setArrowType(Qt::RightArrow);
+    connect(m_mouseConfigToggleBtn, &QToolButton::toggled, this, &Dialog::setMouseConfigExpanded);
+    usbLayout->addWidget(m_mouseConfigToggleBtn);
+
+    m_mouseConfigContent = new QWidget(ui->usbGroupBox);
+    auto mouseLayout = new QFormLayout(m_mouseConfigContent);
+    mouseLayout->setContentsMargins(18, 0, 0, 0);
+    mouseLayout->setSpacing(4);
+
+    const QString mouseConfigScopeTip = tr("仅对当前选中设备生效。");
+    const QString remoteCursorToolTip = tr("控制手机画面里的远端黑色鼠标光标是否渲染；关闭后会按现有隐藏逻辑清掉。\n%1")
+        .arg(mouseConfigScopeTip);
+    const QString cursorSizeToolTip = tr("远端光标大小，范围 8~128。\n%1").arg(mouseConfigScopeTip);
+    const QString normalMouseCompatToolTip = tr("非相对视角下的普通鼠标兼容总开关；关闭时下面几项兼容参数不生效。\n%1")
+        .arg(mouseConfigScopeTip);
+    const QString touchPriorityToolTip = tr("让普通点击和滑动触控优先于远端黑光标刷新。\n%1")
+        .arg(mouseConfigScopeTip);
+    const QString cursorThrottleToolTip = tr("启用普通模式远端黑光标限频与点击静默；关闭后恢复更即时的光标发送。\n%1")
+        .arg(mouseConfigScopeTip);
+    const QString flushIntervalToolTip = tr("黑光标刷新间隔，范围 16~100 ms；越大越稳，但越不跟手。\n%1")
+        .arg(mouseConfigScopeTip);
+    const QString clickSuppressionToolTip = tr("点击前后黑光标静默时间，范围 0~300 ms；越大越优先保证点击。\n%1")
+        .arg(mouseConfigScopeTip);
+    const QString tapMinHoldToolTip = tr("普通左键轻点最小按压时长，范围 0~40 ms；0 表示关闭，越大越稳但点击感更慢。\n%1")
+        .arg(mouseConfigScopeTip);
 
     auto addLabeledMouseConfigRow = [this](QFormLayout *layout, const QString &labelText,
                                            const QString &toolTip, QWidget *field) {
@@ -344,70 +471,12 @@ void Dialog::initSelectedDeviceConfigUi()
         layout->addRow(label, field);
     };
 
-    auto selectedDeviceRow = new QHBoxLayout();
-    selectedDeviceRow->setContentsMargins(0, 0, 0, 0);
-    selectedDeviceRow->addWidget(new QLabel(tr("当前设备："), m_selectedDeviceConfigGroup));
-    m_selectedDeviceSerialValue = new QLabel(tr("未选择设备"), m_selectedDeviceConfigGroup);
+    auto *selectedDeviceLabel = new QLabel(tr("当前设备："), m_mouseConfigContent);
+    selectedDeviceLabel->setToolTip(mouseConfigScopeTip);
+    m_selectedDeviceSerialValue = new QLabel(tr("未选择设备"), m_mouseConfigContent);
     m_selectedDeviceSerialValue->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    selectedDeviceRow->addWidget(m_selectedDeviceSerialValue, 1);
-    groupLayout->addLayout(selectedDeviceRow);
-
-    auto deviceCenterCropRow = new QHBoxLayout();
-    deviceCenterCropRow->setContentsMargins(0, 0, 0, 0);
-    m_deviceCenterCropCheck = new QCheckBox(tr("center crop"), m_selectedDeviceConfigGroup);
-    deviceCenterCropRow->addWidget(m_deviceCenterCropCheck);
-    deviceCenterCropRow->addStretch(1);
-
-    auto deviceCenterCropLabel = new QLabel(tr("crop size:"), m_selectedDeviceConfigGroup);
-    deviceCenterCropRow->addWidget(deviceCenterCropLabel);
-
-    m_deviceCenterCropSizeSpin = new QSpinBox(m_selectedDeviceConfigGroup);
-    m_deviceCenterCropSizeSpin->setRange(2, 4096);
-    m_deviceCenterCropSizeSpin->setSingleStep(2);
-    m_deviceCenterCropSizeSpin->setValue(256);
-    m_deviceCenterCropSizeSpin->setEnabled(false);
-    deviceCenterCropLabel->setBuddy(m_deviceCenterCropSizeSpin);
-    deviceCenterCropRow->addWidget(m_deviceCenterCropSizeSpin);
-    groupLayout->addLayout(deviceCenterCropRow);
-
-    auto deviceMaxFpsRow = new QHBoxLayout();
-    deviceMaxFpsRow->setContentsMargins(0, 0, 0, 0);
-    auto deviceMaxFpsLabel = new QLabel(tr("最大帧率："), m_selectedDeviceConfigGroup);
-    deviceMaxFpsRow->addWidget(deviceMaxFpsLabel);
-
-    m_deviceMaxFpsSpin = new QSpinBox(m_selectedDeviceConfigGroup);
-    m_deviceMaxFpsSpin->setRange(0, 240);
-    m_deviceMaxFpsSpin->setToolTip(tr("0 = 不限制，重启服务后生效"));
-    deviceMaxFpsLabel->setBuddy(m_deviceMaxFpsSpin);
-    deviceMaxFpsRow->addWidget(m_deviceMaxFpsSpin);
-    deviceMaxFpsRow->addStretch(1);
-
-    m_deviceMaxFpsOverrideCheck = new QCheckBox(tr("启用独有配置"), m_selectedDeviceConfigGroup);
-    deviceMaxFpsRow->addWidget(m_deviceMaxFpsOverrideCheck);
-    groupLayout->addLayout(deviceMaxFpsRow);
-
-    m_mouseConfigToggleBtn = new QToolButton(m_selectedDeviceConfigGroup);
-    m_mouseConfigToggleBtn->setText(tr("鼠标显示设置"));
-    m_mouseConfigToggleBtn->setCheckable(true);
-    m_mouseConfigToggleBtn->setChecked(false);
-    m_mouseConfigToggleBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    m_mouseConfigToggleBtn->setArrowType(Qt::RightArrow);
-    connect(m_mouseConfigToggleBtn, &QToolButton::toggled, this, &Dialog::setMouseConfigExpanded);
-    groupLayout->addWidget(m_mouseConfigToggleBtn);
-
-    m_mouseConfigContent = new QWidget(m_selectedDeviceConfigGroup);
-    auto mouseLayout = new QFormLayout(m_mouseConfigContent);
-    mouseLayout->setContentsMargins(18, 0, 0, 0);
-    mouseLayout->setSpacing(4);
-
-    const QString remoteCursorToolTip = tr("控制手机画面里的远端黑色鼠标光标是否渲染；关闭后会按现有隐藏逻辑清掉。");
-    const QString cursorSizeToolTip = tr("远端光标大小，范围 8~128。");
-    const QString normalMouseCompatToolTip = tr("非相对视角下的普通鼠标兼容总开关；关闭时下面几项兼容参数不生效。");
-    const QString touchPriorityToolTip = tr("让普通点击和滑动触控优先于远端黑光标刷新。");
-    const QString cursorThrottleToolTip = tr("启用普通模式远端黑光标限频与点击静默；关闭后恢复更即时的光标发送。");
-    const QString flushIntervalToolTip = tr("黑光标刷新间隔，范围 16~100 ms；越大越稳，但越不跟手。");
-    const QString clickSuppressionToolTip = tr("点击前后黑光标静默时间，范围 0~300 ms；越大越优先保证点击。");
-    const QString tapMinHoldToolTip = tr("普通左键轻点最小按压时长，范围 0~40 ms；0 表示关闭，越大越稳但点击感更慢。");
+    m_selectedDeviceSerialValue->setToolTip(mouseConfigScopeTip);
+    mouseLayout->addRow(selectedDeviceLabel, m_selectedDeviceSerialValue);
 
     m_renderRemoteCursorCheck = new QCheckBox(m_mouseConfigContent);
     addLabeledMouseConfigRow(mouseLayout, tr("Render Remote Cursor"), remoteCursorToolTip, m_renderRemoteCursorCheck);
@@ -440,7 +509,8 @@ void Dialog::initSelectedDeviceConfigUi()
     m_normalMouseTapMinHoldSpin->setSuffix(tr(" ms"));
     addLabeledMouseConfigRow(mouseLayout, tr("Tap Min Hold"), tapMinHoldToolTip, m_normalMouseTapMinHoldSpin);
 
-    groupLayout->addWidget(m_mouseConfigContent);
+    m_mouseConfigContent->setToolTip(mouseConfigScopeTip);
+    usbLayout->addWidget(m_mouseConfigContent);
     setMouseConfigExpanded(false);
 
     connect(m_renderRemoteCursorCheck, &QCheckBox::toggled, this, &Dialog::onSelectedDeviceMouseConfigEdited);
@@ -455,16 +525,6 @@ void Dialog::initSelectedDeviceConfigUi()
             this, &Dialog::onSelectedDeviceMouseConfigEdited);
     connect(m_normalMouseTapMinHoldSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
             this, &Dialog::onSelectedDeviceMouseConfigEdited);
-    connect(m_deviceMaxFpsSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
-            this, &Dialog::onSelectedDeviceMaxFpsConfigEdited);
-    connect(m_deviceMaxFpsOverrideCheck, &QCheckBox::toggled,
-            this, &Dialog::onSelectedDeviceMaxFpsConfigEdited);
-    connect(m_deviceCenterCropCheck, &QCheckBox::toggled,
-            this, &Dialog::onSelectedDeviceCenterCropConfigEdited);
-    connect(m_deviceCenterCropSizeSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
-            this, &Dialog::onSelectedDeviceCenterCropConfigEdited);
-
-    rightLayout->insertWidget(1, m_selectedDeviceConfigGroup);
 }
 
 void Dialog::initControlToolTips()
@@ -481,8 +541,6 @@ void Dialog::initControlToolTips()
     const QString recordScreenToolTip = tr("连接设备时自动开始录制。只影响新启动的会话；运行中的开始和停止请使用视频窗口旁的录制按钮。");
     const QString deviceCenterCropToolTip = tr("为当前设备启用独有的中心裁切参数。开启后只对当前选中设备生效。");
     const QString deviceCenterCropSizeToolTip = tr("设置当前设备中心裁切尺寸，只有开启中心裁切后才会生效。");
-    const QString deviceMaxFpsToolTip = tr("为当前设备设置独有最大帧率。0 表示不限制；重启服务后生效。");
-    const QString deviceMaxFpsOverrideToolTip = tr("启用当前设备的独有最大帧率覆盖。开启后会覆盖全局最大帧率设置。");
 
     ui->useSingleModeCheck->setToolTip(tr("切换为快捷连接模式。开启后会隐藏右侧高级配置，只保留左侧快速连接入口。"));
     ui->wifiConnectBtn->setToolTip(tr("按预设流程尝试无线连接：刷新设备、读取 IP、切换 adbd 到 tcpip、执行 adb connect，然后启动投屏。设备需要先通过 USB 被 adb 识别。"));
@@ -539,12 +597,6 @@ void Dialog::initControlToolTips()
     if (m_deviceCenterCropSizeSpin) {
         m_deviceCenterCropSizeSpin->setToolTip(deviceCenterCropSizeToolTip);
     }
-    if (m_deviceMaxFpsSpin) {
-        m_deviceMaxFpsSpin->setToolTip(deviceMaxFpsToolTip);
-    }
-    if (m_deviceMaxFpsOverrideCheck) {
-        m_deviceMaxFpsOverrideCheck->setToolTip(deviceMaxFpsOverrideToolTip);
-    }
     if (m_mouseConfigToggleBtn) {
         m_mouseConfigToggleBtn->setToolTip(buildMouseConfigToggleToolTip());
     }
@@ -556,6 +608,9 @@ void Dialog::refreshControlToolTips()
 {
     ui->recordPathEdt->setToolTip(buildRecordPathToolTip());
     ui->localTextInputShortcutEdit->setToolTip(buildLocalTextInputShortcutToolTip());
+    if (m_keymapEditorShortcutEdit) {
+        m_keymapEditorShortcutEdit->setToolTip(buildKeymapEditorShortcutToolTip());
+    }
     setComboAndLineEditToolTip(ui->deviceIpEdt, buildDeviceIpToolTip());
     setComboAndLineEditToolTip(ui->devicePortEdt, buildDevicePortToolTip());
     refreshAutoUpdateToolTips();
@@ -619,6 +674,19 @@ QString Dialog::buildLocalTextInputShortcutToolTip() const
     return toolTip;
 }
 
+QString Dialog::buildKeymapEditorShortcutToolTip() const
+{
+    const QString shortcut = currentKeymapEditorShortcut().toString(QKeySequence::NativeText).trimmed();
+    QString toolTip = tr("设置视频窗口里打开或关闭键位编辑器的快捷键。编辑器录键状态下也会复用这个快捷键来取消并关闭。");
+    toolTip += shortcut.isEmpty()
+        ? tr("\n当前快捷键：未设置。")
+        : tr("\n当前快捷键：%1。").arg(shortcut);
+    if (shortcut.isEmpty()) {
+        toolTip += tr("\n当前状态：键盘快捷入口已禁用。");
+    }
+    return toolTip;
+}
+
 QString Dialog::buildDeviceIpToolTip() const
 {
     return tr("输入或选择目标设备的 IP 地址。成功连接后会自动记录历史；右键输入框可清空历史记录。");
@@ -633,8 +701,16 @@ QString Dialog::buildMouseConfigToggleToolTip() const
 {
     const bool expanded = m_mouseConfigToggleBtn && m_mouseConfigToggleBtn->isChecked();
     return expanded
-        ? tr("收起当前设备的鼠标显示兼容参数。\n当前状态：已展开。")
-        : tr("展开当前设备的鼠标显示兼容参数。\n当前状态：已收起。");
+        ? tr("展开区域里的参数仅对当前选中设备生效。\n当前状态：已展开，点击后收起。")
+        : tr("展开当前选中设备的鼠标显示兼容参数。\n当前状态：已收起。");
+}
+
+QKeySequence Dialog::currentKeymapEditorShortcut() const
+{
+    if (!m_keymapEditorShortcutEdit) {
+        return QKeySequence(QStringLiteral("Ctrl+E"));
+    }
+    return normalizeSingleShortcut(m_keymapEditorShortcutEdit->keySequence());
 }
 
 QString Dialog::currentSelectedSerial() const
@@ -687,7 +763,7 @@ void Dialog::setMouseConfigExpanded(bool expanded)
 
 void Dialog::updateSelectedDeviceConfigControlState()
 {
-    if (!m_selectedDeviceConfigGroup) {
+    if (!m_gameDeviceConfigGroup && !m_mouseConfigContent) {
         return;
     }
 
@@ -695,25 +771,21 @@ void Dialog::updateSelectedDeviceConfigControlState()
     const bool centerCropEnabled = hasSerial
         && m_deviceCenterCropCheck
         && m_deviceCenterCropCheck->isChecked();
-    const bool deviceMaxFpsOverrideEnabled = hasSerial
-        && m_deviceMaxFpsOverrideCheck
-        && m_deviceMaxFpsOverrideCheck->isChecked();
     const bool compatEnabled = hasSerial
         && m_normalMouseCompatEnabledCheck
         && m_normalMouseCompatEnabledCheck->isChecked();
 
-    m_selectedDeviceConfigGroup->setEnabled(hasSerial);
+    if (m_gameDeviceConfigGroup) {
+        m_gameDeviceConfigGroup->setEnabled(hasSerial);
+    }
     if (m_deviceCenterCropCheck) {
         m_deviceCenterCropCheck->setEnabled(hasSerial);
     }
     if (m_deviceCenterCropSizeSpin) {
         m_deviceCenterCropSizeSpin->setEnabled(centerCropEnabled);
     }
-    if (m_deviceMaxFpsOverrideCheck) {
-        m_deviceMaxFpsOverrideCheck->setEnabled(hasSerial);
-    }
-    if (m_deviceMaxFpsSpin) {
-        m_deviceMaxFpsSpin->setEnabled(deviceMaxFpsOverrideEnabled);
+    if (m_mouseConfigContent) {
+        m_mouseConfigContent->setEnabled(hasSerial);
     }
     if (m_renderRemoteCursorCheck) {
         m_renderRemoteCursorCheck->setEnabled(hasSerial);
@@ -743,7 +815,7 @@ void Dialog::updateSelectedDeviceConfigControlState()
 
 void Dialog::updateSelectedDeviceConfigUi(const QString &serial)
 {
-    if (!m_selectedDeviceConfigGroup) {
+    if (!m_gameDeviceConfigGroup && !m_mouseConfigContent) {
         return;
     }
 
@@ -753,22 +825,18 @@ void Dialog::updateSelectedDeviceConfigUi(const QString &serial)
     if (m_selectedDeviceSerialValue) {
         m_selectedDeviceSerialValue->setText(formatSelectedDeviceDisplayName(trimmedSerial));
     }
+    if (m_gameSelectedDeviceSerialValue) {
+        m_gameSelectedDeviceSerialValue->setText(formatSelectedDeviceDisplayName(trimmedSerial));
+    }
 
     const bool centerCropEnabled = Config::getInstance().isDeviceCenterCropEnabled(trimmedSerial);
     const int centerCropSize = centerCropEnabled
         ? Config::getInstance().getDeviceCenterCropSize(trimmedSerial)
         : 256;
-    const bool hasMaxFpsOverride = Config::getInstance().hasDeviceMaxFpsOverride(trimmedSerial);
-    const int fallbackMaxFps = ui->maxFpsSpin ? ui->maxFpsSpin->value() : Config::getInstance().getGlobalMaxFps();
-    const int deviceMaxFps = hasMaxFpsOverride
-        ? Config::getInstance().getDeviceMaxFpsOverride(trimmedSerial)
-        : fallbackMaxFps;
     DeviceMouseConfig config = Config::getInstance().getDeviceMouseConfig(trimmedSerial);
 
     const QSignalBlocker centerCropCheckBlocker(m_deviceCenterCropCheck);
     const QSignalBlocker centerCropSizeBlocker(m_deviceCenterCropSizeSpin);
-    const QSignalBlocker deviceMaxFpsBlocker(m_deviceMaxFpsSpin);
-    const QSignalBlocker deviceMaxFpsOverrideBlocker(m_deviceMaxFpsOverrideCheck);
     const QSignalBlocker remoteCursorBlocker(m_renderRemoteCursorCheck);
     const QSignalBlocker cursorSizeBlocker(m_cursorSizeSpin);
     const QSignalBlocker compatBlocker(m_normalMouseCompatEnabledCheck);
@@ -783,12 +851,6 @@ void Dialog::updateSelectedDeviceConfigUi(const QString &serial)
     }
     if (m_deviceCenterCropSizeSpin) {
         m_deviceCenterCropSizeSpin->setValue(centerCropSize);
-    }
-    if (m_deviceMaxFpsOverrideCheck) {
-        m_deviceMaxFpsOverrideCheck->setChecked(hasMaxFpsOverride);
-    }
-    if (m_deviceMaxFpsSpin) {
-        m_deviceMaxFpsSpin->setValue(deviceMaxFps);
     }
     if (m_renderRemoteCursorCheck) {
         m_renderRemoteCursorCheck->setChecked(config.remoteCursorEnabled);
@@ -887,49 +949,6 @@ void Dialog::onSelectedDeviceCenterCropConfigEdited()
     saveSelectedDeviceCenterCropConfig();
 }
 
-void Dialog::saveSelectedDeviceMaxFpsConfig()
-{
-    if (m_updatingSelectedDeviceConfigUi) {
-        return;
-    }
-
-    const QString serial = currentSelectedSerial();
-    if (serial.isEmpty()) {
-        updateSelectedDeviceConfigControlState();
-        return;
-    }
-
-    const bool useDeviceOverride = m_deviceMaxFpsOverrideCheck && m_deviceMaxFpsOverrideCheck->isChecked();
-    if (useDeviceOverride) {
-        const int maxFps = m_deviceMaxFpsSpin ? m_deviceMaxFpsSpin->value() : 0;
-        Config::getInstance().setDeviceMaxFpsOverride(serial, maxFps);
-    } else {
-        Config::getInstance().clearDeviceMaxFpsOverride(serial);
-        if (m_deviceMaxFpsSpin && ui->maxFpsSpin) {
-            const QSignalBlocker blocker(m_deviceMaxFpsSpin);
-            m_deviceMaxFpsSpin->setValue(ui->maxFpsSpin->value());
-        }
-    }
-
-    updateSelectedDeviceConfigControlState();
-}
-
-void Dialog::onSelectedDeviceMaxFpsConfigEdited()
-{
-    saveSelectedDeviceMaxFpsConfig();
-}
-
-void Dialog::onGlobalMaxFpsValueChanged(int value)
-{
-    Q_UNUSED(value);
-    if (!m_deviceMaxFpsSpin || !m_deviceMaxFpsOverrideCheck || m_deviceMaxFpsOverrideCheck->isChecked()) {
-        return;
-    }
-
-    const QSignalBlocker blocker(m_deviceMaxFpsSpin);
-    m_deviceMaxFpsSpin->setValue(ui->maxFpsSpin->value());
-}
-
 void Dialog::updateBootConfig(bool toView)
 {
     if (toView) {
@@ -952,6 +971,7 @@ void Dialog::updateBootConfig(bool toView)
         }
         const QSignalBlocker autoUpdateBlocker(ui->autoUpdatecheckBox);
         const QSignalBlocker autoUpdateIntervalBlocker(ui->autoUpdateIntervalSpin);
+        const QSignalBlocker keymapEditorShortcutBlocker(m_keymapEditorShortcutEdit);
         ui->maxFpsSpin->setValue(config.maxFps);
         ui->maxSizeBox->setCurrentIndex(config.maxSizeIndex);
         ui->formatBox->setCurrentIndex(config.recordFormatIndex);
@@ -959,6 +979,10 @@ void Dialog::updateBootConfig(bool toView)
         ui->lockOrientationBox->setCurrentIndex(config.lockOrientationIndex);
         ui->localTextInputCheck->setChecked(config.localTextInputEnabled);
         ui->localTextInputShortcutEdit->setKeySequence(QKeySequence::fromString(config.localTextInputShortcut, QKeySequence::PortableText));
+        if (m_keymapEditorShortcutEdit) {
+            m_keymapEditorShortcutEdit->setKeySequence(normalizeSingleShortcut(
+                QKeySequence::fromString(config.keymapEditorShortcut, QKeySequence::PortableText)));
+        }
         ui->framelessCheck->setChecked(config.framelessWindow);
         ui->recordScreenCheck->setChecked(config.recordScreen);
         ui->notDisplayCheck->setChecked(config.recordBackground);
@@ -974,6 +998,7 @@ void Dialog::updateBootConfig(bool toView)
         applyAutoUpdateTimerState();
         refreshControlToolTips();
         applyLocalTextInputConfigToOpenVideoForms();
+        applyKeymapEditorShortcutToOpenVideoForms();
     } else {
         UserBootConfig config;
 
@@ -986,6 +1011,7 @@ void Dialog::updateBootConfig(bool toView)
         config.lockOrientationIndex = ui->lockOrientationBox->currentIndex();
         config.localTextInputEnabled = ui->localTextInputCheck->isChecked();
         config.localTextInputShortcut = ui->localTextInputShortcutEdit->keySequence().toString(QKeySequence::PortableText);
+        config.keymapEditorShortcut = currentKeymapEditorShortcut().toString(QKeySequence::PortableText);
         config.recordScreen = ui->recordScreenCheck->isChecked();
         config.recordBackground = ui->notDisplayCheck->isChecked();
         config.reverseConnect = ui->useReverseCheck->isChecked();
@@ -1255,6 +1281,7 @@ void Dialog::onDeviceConnected(bool success, const QString &serial, const QStrin
     videoForm->setSerial(serial);
     videoForm->setInitialOrientationHint(initialOrientation);
     videoForm->setLocalTextInputConfig(ui->localTextInputCheck->isChecked(), ui->localTextInputShortcutEdit->keySequence());
+    videoForm->setKeymapEditorShortcut(currentKeymapEditorShortcut());
     connect(videoForm, &VideoForm::restartServiceRequested, this, &Dialog::onRestartDeviceRequested);
     connect(videoForm, &QObject::destroyed, this, [this, serial]() {
         m_videoForms.remove(serial);
@@ -1487,6 +1514,20 @@ void Dialog::on_localTextInputShortcutEdit_keySequenceChanged(const QKeySequence
     applyLocalTextInputConfigToOpenVideoForms();
 }
 
+void Dialog::on_keymapEditorShortcutEdit_keySequenceChanged(const QKeySequence &keySequence)
+{
+    Q_UNUSED(keySequence);
+    if (m_keymapEditorShortcutEdit) {
+        const QKeySequence normalized = normalizeSingleShortcut(m_keymapEditorShortcutEdit->keySequence());
+        if (normalized != m_keymapEditorShortcutEdit->keySequence()) {
+            const QSignalBlocker blocker(m_keymapEditorShortcutEdit);
+            m_keymapEditorShortcutEdit->setKeySequence(normalized);
+        }
+    }
+    refreshControlToolTips();
+    applyKeymapEditorShortcutToOpenVideoForms();
+}
+
 void Dialog::on_usbConnectBtn_clicked()
 {
     on_stopAllServerBtn_clicked();
@@ -1618,11 +1659,14 @@ qsc::DeviceParams Dialog::buildDeviceParams(const QString &serial)
     // this is ok that "original" toUshort is 0
     quint16 videoSize = ui->maxSizeBox->currentText().trimmed().toUShort();
     const QString trimmedSerial = serial.trimmed();
+    if (!trimmedSerial.isEmpty()) {
+        Config::getInstance().ensureDeviceMouseConfigInitialized(trimmedSerial);
+    }
     qsc::DeviceParams params;
     params.serial = trimmedSerial;
     params.maxSize = videoSize;
     params.bitRate = getBitRate();
-    params.maxFps = static_cast<quint32>(Config::getInstance().getEffectiveMaxFps(trimmedSerial));
+    params.maxFps = static_cast<quint32>(qBound(0, ui->maxFpsSpin->value(), 240));
     params.closeScreen = ui->closeScreenCheck->isChecked();
     params.useReverse = ui->useReverseCheck->isChecked();
     params.display = !ui->notDisplayCheck->isChecked();
@@ -1656,6 +1700,19 @@ void Dialog::applyLocalTextInputConfigToOpenVideoForms()
             continue;
         }
         it.value()->setLocalTextInputConfig(enabled, shortcut);
+        ++it;
+    }
+}
+
+void Dialog::applyKeymapEditorShortcutToOpenVideoForms()
+{
+    const QKeySequence shortcut = currentKeymapEditorShortcut();
+    for (auto it = m_videoForms.begin(); it != m_videoForms.end();) {
+        if (it.value().isNull()) {
+            it = m_videoForms.erase(it);
+            continue;
+        }
+        it.value()->setKeymapEditorShortcut(shortcut);
         ++it;
     }
 }
@@ -1812,12 +1869,19 @@ void Dialog::restartApplication()
 
     if (QProcess::startDetached(program, args, workdir)) {
         outLog(QString("restart application: %1").arg(program));
-        m_hideIcon->hide();
-        qApp->quit();
+        quitApplicationDirectly();
         return;
     }
 
     const QString error = QString("restart application failed: %1").arg(program);
     outLog(error);
     QMessageBox::warning(this, tr("restart"), error);
+}
+
+void Dialog::quitApplicationDirectly()
+{
+    if (m_hideIcon) {
+        m_hideIcon->hide();
+    }
+    qApp->quit();
 }
