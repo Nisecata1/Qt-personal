@@ -63,6 +63,11 @@ QKeySequence normalizeSingleShortcut(const QKeySequence &shortcut)
     return QKeySequence(shortcut[0]);
 #endif
 }
+
+QKeySequence defaultGameMouseLockShortcut()
+{
+    return normalizeSingleShortcut(QKeySequence(Qt::Key_QuoteLeft));
+}
 }
 
 const QString &getKeyMapPath()
@@ -320,6 +325,14 @@ void Dialog::initUI()
 
     connect(ui->serialBox, &QComboBox::currentTextChanged,
             this, &Dialog::handleSelectedSerialChanged);
+    connect(ui->fpsCheck, &QCheckBox::toggled, this, [this](bool) {
+        updateBootConfig(false);
+        applyStatsOverlayConfigToOpenVideoForms();
+    });
+    connect(ui->bitrateCheck, &QCheckBox::toggled, this, [this](bool) {
+        updateBootConfig(false);
+        applyStatsOverlayConfigToOpenVideoForms();
+    });
     if (m_themeModeBox) {
         connect(m_themeModeBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
                 this, &Dialog::onThemeModeChanged);
@@ -365,6 +378,7 @@ void Dialog::initGameFeatureUi()
     auto *shortcutWidget = new QWidget(m_gameFeatureGroup);
     auto *shortcutLayout = new QHBoxLayout(shortcutWidget);
     shortcutLayout->setContentsMargins(0, 0, 0, 0);
+    shortcutLayout->setSpacing(6);
 
     auto *shortcutLabel = new QLabel(tr("键位编辑热键："), shortcutWidget);
     m_keymapEditorShortcutEdit = new QKeySequenceEdit(shortcutWidget);
@@ -372,8 +386,17 @@ void Dialog::initGameFeatureUi()
     m_keymapEditorShortcutEdit->setKeySequence(QKeySequence(QStringLiteral("Ctrl+E")));
     shortcutLabel->setBuddy(m_keymapEditorShortcutEdit);
 
+    auto *gameMouseLockShortcutLabel = new QLabel(tr("鼠标锁定热键："), shortcutWidget);
+    m_gameMouseLockShortcutEdit = new QKeySequenceEdit(shortcutWidget);
+    m_gameMouseLockShortcutEdit->setObjectName(QStringLiteral("gameMouseLockShortcutEdit"));
+    m_gameMouseLockShortcutEdit->setKeySequence(defaultGameMouseLockShortcut());
+    gameMouseLockShortcutLabel->setBuddy(m_gameMouseLockShortcutEdit);
+
     shortcutLayout->addWidget(shortcutLabel);
     shortcutLayout->addWidget(m_keymapEditorShortcutEdit, 1);
+    shortcutLayout->addSpacing(8);
+    shortcutLayout->addWidget(gameMouseLockShortcutLabel);
+    shortcutLayout->addWidget(m_gameMouseLockShortcutEdit, 1);
     groupLayout->addWidget(shortcutWidget);
 
     m_gameDeviceConfigGroup = new QGroupBox(tr("设备独有配置"), m_gameFeatureGroup);
@@ -413,6 +436,8 @@ void Dialog::initGameFeatureUi()
 
     connect(m_keymapEditorShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
             this, &Dialog::on_keymapEditorShortcutEdit_keySequenceChanged);
+    connect(m_gameMouseLockShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
+            this, &Dialog::on_gameMouseLockShortcutEdit_keySequenceChanged);
     connect(m_deviceCenterCropCheck, &QCheckBox::toggled,
             this, &Dialog::onSelectedDeviceCenterCropConfigEdited);
     connect(m_deviceCenterCropSizeSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
@@ -563,6 +588,7 @@ void Dialog::initControlToolTips()
     ui->refreshGameScriptBtn->setToolTip(tr("重新扫描 keymap 目录里的脚本文件并刷新列表。"));
     ui->applyScriptBtn->setToolTip(tr("将当前选中的脚本立即应用到已连接设备和已打开的视频窗口。"));
     ui->fpsCheck->setToolTip(tr("在视频窗口显示实时帧率信息。只影响窗口显示，不改变采集帧率。"));
+    ui->bitrateCheck->setToolTip(tr("在视频窗口显示实时接收码率信息。只影响窗口显示，不改变采集参数，也不是目标编码码率配置。"));
     ui->notDisplayCheck->setToolTip(tr("连接后不显示设备画面，只保留后台会话。通常配合录屏使用；未设置录屏目录时不会允许勾选。"));
     ui->alwaysTopCheck->setToolTip(tr("让视频窗口保持置顶。只影响新打开或当前已打开的视频窗口。"));
     ui->recordScreenCheck->setToolTip(recordScreenToolTip);
@@ -611,9 +637,14 @@ void Dialog::refreshControlToolTips()
     if (m_keymapEditorShortcutEdit) {
         m_keymapEditorShortcutEdit->setToolTip(buildKeymapEditorShortcutToolTip());
     }
+    if (m_gameMouseLockShortcutEdit) {
+        m_gameMouseLockShortcutEdit->setToolTip(buildGameMouseLockShortcutToolTip());
+    }
     setComboAndLineEditToolTip(ui->deviceIpEdt, buildDeviceIpToolTip());
     setComboAndLineEditToolTip(ui->devicePortEdt, buildDevicePortToolTip());
     refreshAutoUpdateToolTips();
+    ui->fpsCheck->setToolTip(tr("在视频窗口显示实时帧率信息。只影响窗口显示，不改变采集帧率。"));
+    ui->bitrateCheck->setToolTip(tr("在视频窗口显示实时接收码率信息。只影响窗口显示，不改变采集参数，也不是目标编码码率配置。"));
 
     if (m_mouseConfigToggleBtn) {
         m_mouseConfigToggleBtn->setToolTip(buildMouseConfigToggleToolTip());
@@ -687,6 +718,19 @@ QString Dialog::buildKeymapEditorShortcutToolTip() const
     return toolTip;
 }
 
+QString Dialog::buildGameMouseLockShortcutToolTip() const
+{
+    const QString shortcut = currentGameMouseLockShortcut().toString(QKeySequence::NativeText).trimmed();
+    QString toolTip = tr("设置视频窗口里手动将鼠标限制在当前投屏区域内的快捷键。仅对已绑定脚本的窗口生效，再按一次解除锁定。");
+    toolTip += shortcut.isEmpty()
+        ? tr("\n当前快捷键：未设置。")
+        : tr("\n当前快捷键：%1。").arg(shortcut);
+    if (shortcut.isEmpty()) {
+        toolTip += tr("\n当前状态：键盘快捷入口已禁用。");
+    }
+    return toolTip;
+}
+
 QString Dialog::buildDeviceIpToolTip() const
 {
     return tr("输入或选择目标设备的 IP 地址。成功连接后会自动记录历史；右键输入框可清空历史记录。");
@@ -711,6 +755,14 @@ QKeySequence Dialog::currentKeymapEditorShortcut() const
         return QKeySequence(QStringLiteral("Ctrl+E"));
     }
     return normalizeSingleShortcut(m_keymapEditorShortcutEdit->keySequence());
+}
+
+QKeySequence Dialog::currentGameMouseLockShortcut() const
+{
+    if (!m_gameMouseLockShortcutEdit) {
+        return defaultGameMouseLockShortcut();
+    }
+    return normalizeSingleShortcut(m_gameMouseLockShortcutEdit->keySequence());
 }
 
 QString Dialog::currentSelectedSerial() const
@@ -883,6 +935,7 @@ void Dialog::updateSelectedDeviceConfigUi(const QString &serial)
 
 void Dialog::saveSelectedDeviceMouseConfig()
 {
+    // 保存当前设备的鼠标配置；先读取旧值，确保没有 UI 控件的隐藏调参项不会被默认值覆盖。
     if (m_updatingSelectedDeviceConfigUi) {
         return;
     }
@@ -893,7 +946,7 @@ void Dialog::saveSelectedDeviceMouseConfig()
         return;
     }
 
-    DeviceMouseConfig config;
+    DeviceMouseConfig config = Config::getInstance().getDeviceMouseConfig(serial);
     config.remoteCursorEnabled = m_renderRemoteCursorCheck && m_renderRemoteCursorCheck->isChecked();
     config.cursorSizePx = m_cursorSizeSpin ? m_cursorSizeSpin->value() : 24;
     config.normalMouseCompatEnabled = m_normalMouseCompatEnabledCheck && m_normalMouseCompatEnabledCheck->isChecked();
@@ -971,7 +1024,6 @@ void Dialog::updateBootConfig(bool toView)
         }
         const QSignalBlocker autoUpdateBlocker(ui->autoUpdatecheckBox);
         const QSignalBlocker autoUpdateIntervalBlocker(ui->autoUpdateIntervalSpin);
-        const QSignalBlocker keymapEditorShortcutBlocker(m_keymapEditorShortcutEdit);
         ui->maxFpsSpin->setValue(config.maxFps);
         ui->maxSizeBox->setCurrentIndex(config.maxSizeIndex);
         ui->formatBox->setCurrentIndex(config.recordFormatIndex);
@@ -980,14 +1032,31 @@ void Dialog::updateBootConfig(bool toView)
         ui->localTextInputCheck->setChecked(config.localTextInputEnabled);
         ui->localTextInputShortcutEdit->setKeySequence(QKeySequence::fromString(config.localTextInputShortcut, QKeySequence::PortableText));
         if (m_keymapEditorShortcutEdit) {
+            const QSignalBlocker keymapEditorShortcutBlocker(m_keymapEditorShortcutEdit);
             m_keymapEditorShortcutEdit->setKeySequence(normalizeSingleShortcut(
                 QKeySequence::fromString(config.keymapEditorShortcut, QKeySequence::PortableText)));
+        }
+        if (m_gameMouseLockShortcutEdit) {
+            const QSignalBlocker gameMouseLockShortcutBlocker(m_gameMouseLockShortcutEdit);
+            QKeySequence gameMouseLockShortcut = normalizeSingleShortcut(
+                QKeySequence::fromString(config.gameMouseLockShortcut, QKeySequence::PortableText));
+            if (gameMouseLockShortcut.isEmpty() && config.gameMouseLockShortcut.trimmed() == QStringLiteral("QuoteLeft")) {
+                gameMouseLockShortcut = defaultGameMouseLockShortcut();
+            }
+            m_gameMouseLockShortcutEdit->setKeySequence(gameMouseLockShortcut);
         }
         ui->framelessCheck->setChecked(config.framelessWindow);
         ui->recordScreenCheck->setChecked(config.recordScreen);
         ui->notDisplayCheck->setChecked(config.recordBackground);
         ui->useReverseCheck->setChecked(config.reverseConnect);
-        ui->fpsCheck->setChecked(config.showFPS);
+        {
+            const QSignalBlocker fpsBlocker(ui->fpsCheck);
+            ui->fpsCheck->setChecked(config.showFPS);
+        }
+        {
+            const QSignalBlocker bitrateBlocker(ui->bitrateCheck);
+            ui->bitrateCheck->setChecked(config.showBitRate);
+        }
         ui->alwaysTopCheck->setChecked(config.windowOnTop);
         ui->closeScreenCheck->setChecked(config.autoOffScreen);
         ui->stayAwakeCheck->setChecked(config.keepAlive);
@@ -997,8 +1066,10 @@ void Dialog::updateBootConfig(bool toView)
         ui->showToolbar->setChecked(config.showToolbar);
         applyAutoUpdateTimerState();
         refreshControlToolTips();
+        applyStatsOverlayConfigToOpenVideoForms();
         applyLocalTextInputConfigToOpenVideoForms();
         applyKeymapEditorShortcutToOpenVideoForms();
+        applyGameMouseLockShortcutToOpenVideoForms();
     } else {
         UserBootConfig config;
 
@@ -1012,10 +1083,12 @@ void Dialog::updateBootConfig(bool toView)
         config.localTextInputEnabled = ui->localTextInputCheck->isChecked();
         config.localTextInputShortcut = ui->localTextInputShortcutEdit->keySequence().toString(QKeySequence::PortableText);
         config.keymapEditorShortcut = currentKeymapEditorShortcut().toString(QKeySequence::PortableText);
+        config.gameMouseLockShortcut = currentGameMouseLockShortcut().toString(QKeySequence::PortableText);
         config.recordScreen = ui->recordScreenCheck->isChecked();
         config.recordBackground = ui->notDisplayCheck->isChecked();
         config.reverseConnect = ui->useReverseCheck->isChecked();
         config.showFPS = ui->fpsCheck->isChecked();
+        config.showBitRate = ui->bitrateCheck->isChecked();
         config.windowOnTop = ui->alwaysTopCheck->isChecked();
         config.autoOffScreen = ui->closeScreenCheck->isChecked();
         config.framelessWindow = ui->framelessCheck->isChecked();
@@ -1282,6 +1355,7 @@ void Dialog::onDeviceConnected(bool success, const QString &serial, const QStrin
     videoForm->setInitialOrientationHint(initialOrientation);
     videoForm->setLocalTextInputConfig(ui->localTextInputCheck->isChecked(), ui->localTextInputShortcutEdit->keySequence());
     videoForm->setKeymapEditorShortcut(currentKeymapEditorShortcut());
+    videoForm->setGameMouseLockShortcut(currentGameMouseLockShortcut());
     connect(videoForm, &VideoForm::restartServiceRequested, this, &Dialog::onRestartDeviceRequested);
     connect(videoForm, &QObject::destroyed, this, [this, serial]() {
         m_videoForms.remove(serial);
@@ -1317,8 +1391,7 @@ void Dialog::onDeviceConnected(bool success, const QString &serial, const QStrin
     device->setUserData(static_cast<void*>(videoForm));
     device->registerDeviceObserver(videoForm);
 
-
-    videoForm->showFPS(ui->fpsCheck->isChecked());
+    videoForm->setStatsOverlayConfig(ui->fpsCheck->isChecked(), ui->bitrateCheck->isChecked());
 
     if (ui->alwaysTopCheck->isChecked()) {
         videoForm->staysOnTop();
@@ -1528,6 +1601,20 @@ void Dialog::on_keymapEditorShortcutEdit_keySequenceChanged(const QKeySequence &
     applyKeymapEditorShortcutToOpenVideoForms();
 }
 
+void Dialog::on_gameMouseLockShortcutEdit_keySequenceChanged(const QKeySequence &keySequence)
+{
+    Q_UNUSED(keySequence);
+    if (m_gameMouseLockShortcutEdit) {
+        const QKeySequence normalized = normalizeSingleShortcut(m_gameMouseLockShortcutEdit->keySequence());
+        if (normalized != m_gameMouseLockShortcutEdit->keySequence()) {
+            const QSignalBlocker blocker(m_gameMouseLockShortcutEdit);
+            m_gameMouseLockShortcutEdit->setKeySequence(normalized);
+        }
+    }
+    refreshControlToolTips();
+    applyGameMouseLockShortcutToOpenVideoForms();
+}
+
 void Dialog::on_usbConnectBtn_clicked()
 {
     on_stopAllServerBtn_clicked();
@@ -1704,6 +1791,20 @@ void Dialog::applyLocalTextInputConfigToOpenVideoForms()
     }
 }
 
+void Dialog::applyStatsOverlayConfigToOpenVideoForms()
+{
+    const bool showFps = ui->fpsCheck->isChecked();
+    const bool showBitRate = ui->bitrateCheck->isChecked();
+    for (auto it = m_videoForms.begin(); it != m_videoForms.end();) {
+        if (it.value().isNull()) {
+            it = m_videoForms.erase(it);
+            continue;
+        }
+        it.value()->setStatsOverlayConfig(showFps, showBitRate);
+        ++it;
+    }
+}
+
 void Dialog::applyKeymapEditorShortcutToOpenVideoForms()
 {
     const QKeySequence shortcut = currentKeymapEditorShortcut();
@@ -1713,6 +1814,19 @@ void Dialog::applyKeymapEditorShortcutToOpenVideoForms()
             continue;
         }
         it.value()->setKeymapEditorShortcut(shortcut);
+        ++it;
+    }
+}
+
+void Dialog::applyGameMouseLockShortcutToOpenVideoForms()
+{
+    const QKeySequence shortcut = currentGameMouseLockShortcut();
+    for (auto it = m_videoForms.begin(); it != m_videoForms.end();) {
+        if (it.value().isNull()) {
+            it = m_videoForms.erase(it);
+            continue;
+        }
+        it.value()->setGameMouseLockShortcut(shortcut);
         ++it;
     }
 }

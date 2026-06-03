@@ -42,7 +42,9 @@ public:
     void setInitialOrientationHint(int orientation);
     void setLocalTextInputConfig(bool enabled, const QKeySequence &shortcut);
     void setKeymapEditorShortcut(const QKeySequence &shortcut);
+    void setGameMouseLockShortcut(const QKeySequence &shortcut);
     void setScriptBinding(const QString &filePath, const QString &displayName, const QString &json);
+    void setStatsOverlayConfig(bool showFps, bool showBitRate);
     QRect getGrabCursorRect();
     const QSize &frameSize();
     void resizeSquare();
@@ -58,6 +60,7 @@ private:
     void onFrame(int width, int height, uint8_t* dataY, uint8_t* dataU, uint8_t* dataV,
                  int linesizeY, int linesizeU, int linesizeV) override;
     void updateFPS(quint32 fps) override;
+    void updateBitRate(quint64 bitRate) override;
     void grabCursor(bool grab) override;
 
     void updateStyleSheet(bool vertical);
@@ -92,7 +95,13 @@ private:
     void showLocalTextInputOverlay();
     void hideLocalTextInputOverlay(bool restoreVideoFocus, bool clearText = true);
     void submitLocalTextInputOverlay();
+    void refreshStatsOverlay();
+    void clearManualCursorLock();
     void releaseGrabbedCursorState();
+    bool hasBoundScript() const;
+    bool isCursorConstraintActive() const;
+    void applyCursorConstraintState();
+    void toggleManualCursorLock();
     void initRelativeLookConfigWatcher();
     void ensureRelativeLookConfigWatchPath();
     void reloadRelativeLookInputConfig();
@@ -134,6 +143,7 @@ protected:
 
     void paintEvent(QPaintEvent *) override;
     void showEvent(QShowEvent *event) override;
+    void moveEvent(QMoveEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
 
@@ -157,6 +167,7 @@ private:
     QPointer<QShortcut> m_localTextInputShortcut;
     QVector<QPointer<QShortcut>> m_standardShortcuts;
     QPointer<QShortcut> m_toggleKeymapEditorShortcut;
+    QPointer<QShortcut> m_toggleGameMouseLockShortcut;
     QPointer<KeymapEditorDocument> m_keymapEditorDocument;
     QPointer<KeymapEditorOverlay> m_keymapEditorOverlay;
     QPointer<KeymapEditorPanel> m_keymapEditorPanel;
@@ -202,12 +213,18 @@ private:
     bool m_localTextInputEnabled = true;
     QKeySequence m_localTextInputKeySequence = QKeySequence(QStringLiteral("Ctrl+Shift+T"));
     QKeySequence m_keymapEditorKeySequence = QKeySequence(QStringLiteral("Ctrl+E"));
+    QKeySequence m_gameMouseLockKeySequence = QKeySequence(Qt::Key_QuoteLeft);
+    bool m_showFpsOverlay = false;
+    bool m_showBitRateOverlay = false;
+    quint32 m_lastFps = 0;
+    quint64 m_lastBitRate = 0;
 
     bool m_cursorGrabbed = false;
+    bool m_manualCursorLocked = false;
     bool m_rawInputEnabled = true;
     bool m_rawInputRegistered = false;
     bool m_rawInputActive = false;
-    int m_rawInputSendHz = 240;
+    int m_rawInputSendHz = 144;
     double m_rawInputScale = 12.0;
     double m_recoilStrength = 0.0;
     bool m_leftButtonDown = false;

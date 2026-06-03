@@ -82,6 +82,9 @@
 #define COMMON_KEYMAP_EDITOR_SHORTCUT_KEY "KeymapEditorShortcut"
 #define COMMON_KEYMAP_EDITOR_SHORTCUT_DEF "Ctrl+E"
 
+#define COMMON_GAME_MOUSE_LOCK_SHORTCUT_KEY "GameMouseLockShortcut"
+#define COMMON_GAME_MOUSE_LOCK_SHORTCUT_DEF "QuoteLeft"
+
 #define COMMON_RECORD_SCREEN_KEY "RecordScreen"
 #define COMMON_RECORD_SCREEN_DEF false
 
@@ -93,6 +96,9 @@
 
 #define COMMON_SHOW_FPS_KEY "ShowFPS"
 #define COMMON_SHOW_FPS_DEF false
+
+#define COMMON_SHOW_BITRATE_KEY "ShowBitRate"
+#define COMMON_SHOW_BITRATE_DEF false
 
 #define COMMON_WINDOW_ON_TOP_KEY "WindowOnTop"
 #define COMMON_WINDOW_ON_TOP_DEF false
@@ -141,6 +147,8 @@
 #define SERIAL_NORMAL_MOUSE_CURSOR_FLUSH_INTERVAL_MS_KEY "NormalMouseCursorFlushIntervalMs"
 #define SERIAL_NORMAL_MOUSE_CURSOR_CLICK_SUPPRESSION_MS_KEY "NormalMouseCursorClickSuppressionMs"
 #define SERIAL_NORMAL_MOUSE_TAP_MIN_HOLD_MS_KEY "NormalMouseTapMinHoldMs"
+#define SERIAL_REMOTE_CURSOR_IMMEDIATE_KEY "RemoteCursorImmediate"
+#define SERIAL_REMOTE_CURSOR_MAX_PENDING_BYTES_KEY "RemoteCursorMaxPendingBytes"
 
 // IP history
 #define IP_HISTORY_KEY "IpHistory"
@@ -249,6 +257,7 @@ ThemeMode themeModeFromVariant(const QVariant &value)
 
 bool hasCompleteDeviceMouseConfig(QSettings *settings)
 {
+    // 判断设备分组是否已经包含普通鼠标和远端光标的完整默认项，缺项时由初始化函数补齐。
     return settings
         && settings->contains(SERIAL_REMOTE_CURSOR_ENABLED_KEY)
         && settings->contains(SERIAL_CURSOR_SIZE_PX_KEY)
@@ -257,7 +266,9 @@ bool hasCompleteDeviceMouseConfig(QSettings *settings)
         && settings->contains(SERIAL_NORMAL_MOUSE_CURSOR_THROTTLE_ENABLED_KEY)
         && settings->contains(SERIAL_NORMAL_MOUSE_CURSOR_FLUSH_INTERVAL_MS_KEY)
         && settings->contains(SERIAL_NORMAL_MOUSE_CURSOR_CLICK_SUPPRESSION_MS_KEY)
-        && settings->contains(SERIAL_NORMAL_MOUSE_TAP_MIN_HOLD_MS_KEY);
+        && settings->contains(SERIAL_NORMAL_MOUSE_TAP_MIN_HOLD_MS_KEY)
+        && settings->contains(SERIAL_REMOTE_CURSOR_IMMEDIATE_KEY)
+        && settings->contains(SERIAL_REMOTE_CURSOR_MAX_PENDING_BYTES_KEY);
 }
 }
 
@@ -335,10 +346,12 @@ void Config::setUserBootConfig(const UserBootConfig &config)
     m_userData->setValue(COMMON_LOCAL_TEXT_INPUT_ENABLED_KEY, config.localTextInputEnabled);
     m_userData->setValue(COMMON_LOCAL_TEXT_INPUT_SHORTCUT_KEY, config.localTextInputShortcut);
     m_userData->setValue(COMMON_KEYMAP_EDITOR_SHORTCUT_KEY, config.keymapEditorShortcut);
+    m_userData->setValue(COMMON_GAME_MOUSE_LOCK_SHORTCUT_KEY, config.gameMouseLockShortcut);
     m_userData->setValue(COMMON_RECORD_SCREEN_KEY, config.recordScreen);
     m_userData->setValue(COMMON_RECORD_BACKGROUD_KEY, config.recordBackground);
     m_userData->setValue(COMMON_REVERSE_CONNECT_KEY, config.reverseConnect);
     m_userData->setValue(COMMON_SHOW_FPS_KEY, config.showFPS);
+    m_userData->setValue(COMMON_SHOW_BITRATE_KEY, config.showBitRate);
     m_userData->setValue(COMMON_WINDOW_ON_TOP_KEY, config.windowOnTop);
     m_userData->setValue(COMMON_AUTO_OFF_SCREEN_KEY, config.autoOffScreen);
     m_userData->setValue(COMMON_KEEP_ALIVE_KEY, config.keepAlive);
@@ -363,11 +376,13 @@ UserBootConfig Config::getUserBootConfig()
     config.localTextInputEnabled = m_userData->value(COMMON_LOCAL_TEXT_INPUT_ENABLED_KEY, COMMON_LOCAL_TEXT_INPUT_ENABLED_DEF).toBool();
     config.localTextInputShortcut = m_userData->value(COMMON_LOCAL_TEXT_INPUT_SHORTCUT_KEY, COMMON_LOCAL_TEXT_INPUT_SHORTCUT_DEF).toString();
     config.keymapEditorShortcut = m_userData->value(COMMON_KEYMAP_EDITOR_SHORTCUT_KEY, COMMON_KEYMAP_EDITOR_SHORTCUT_DEF).toString();
+    config.gameMouseLockShortcut = m_userData->value(COMMON_GAME_MOUSE_LOCK_SHORTCUT_KEY, COMMON_GAME_MOUSE_LOCK_SHORTCUT_DEF).toString();
     config.framelessWindow = m_userData->value(COMMON_FRAMELESS_WINDOW_KEY, COMMON_FRAMELESS_WINDOW_DEF).toBool();
     config.recordScreen = m_userData->value(COMMON_RECORD_SCREEN_KEY, COMMON_RECORD_SCREEN_DEF).toBool();
     config.recordBackground = m_userData->value(COMMON_RECORD_BACKGROUD_KEY, COMMON_RECORD_BACKGROUD_DEF).toBool();
     config.reverseConnect = m_userData->value(COMMON_REVERSE_CONNECT_KEY, COMMON_REVERSE_CONNECT_DEF).toBool();
     config.showFPS = m_userData->value(COMMON_SHOW_FPS_KEY, COMMON_SHOW_FPS_DEF).toBool();
+    config.showBitRate = m_userData->value(COMMON_SHOW_BITRATE_KEY, COMMON_SHOW_BITRATE_DEF).toBool();
     config.windowOnTop = m_userData->value(COMMON_WINDOW_ON_TOP_KEY, COMMON_WINDOW_ON_TOP_DEF).toBool();
     config.autoOffScreen = m_userData->value(COMMON_AUTO_OFF_SCREEN_KEY, COMMON_AUTO_OFF_SCREEN_DEF).toBool();
     config.keepAlive = m_userData->value(COMMON_KEEP_ALIVE_KEY, COMMON_KEEP_ALIVE_DEF).toBool();
@@ -498,6 +513,7 @@ void Config::clearDeviceCenterCropSize(const QString &serial)
 
 DeviceMouseConfig Config::getDeviceMouseConfig(const QString &serial)
 {
+    // 从 userdata.ini 的设备分组读取鼠标配置，并把可调范围收紧到运行时允许值。
     DeviceMouseConfig config;
 
     const QString trimmedSerial = serial.trimmed();
@@ -561,17 +577,32 @@ DeviceMouseConfig Config::getDeviceMouseConfig(const QString &serial)
         }
     }
 
+    value = m_userData->value(SERIAL_REMOTE_CURSOR_IMMEDIATE_KEY);
+    if (value.isValid()) {
+        config.remoteCursorImmediate = parseBoolSetting(value, true);
+    }
+
+    value = m_userData->value(SERIAL_REMOTE_CURSOR_MAX_PENDING_BYTES_KEY);
+    if (value.isValid()) {
+        config.remoteCursorMaxPendingBytes = value.toInt(&intOk);
+        if (!intOk) {
+            config.remoteCursorMaxPendingBytes = 1024;
+        }
+    }
+
     m_userData->endGroup();
 
     config.cursorSizePx = qBound(8, config.cursorSizePx, 128);
     config.normalMouseCursorFlushIntervalMs = qBound(16, config.normalMouseCursorFlushIntervalMs, 100);
     config.normalMouseCursorClickSuppressionMs = qBound(0, config.normalMouseCursorClickSuppressionMs, 300);
     config.normalMouseTapMinHoldMs = qBound(0, config.normalMouseTapMinHoldMs, 40);
+    config.remoteCursorMaxPendingBytes = qBound(0, config.remoteCursorMaxPendingBytes, 65536);
     return config;
 }
 
 void Config::ensureDeviceMouseConfigInitialized(const QString &serial)
 {
+    // 打开设备时补齐缺失的设备鼠标配置键，避免后续 UI 保存时缺少默认项。
     const QString trimmedSerial = serial.trimmed();
     if (trimmedSerial.isEmpty()) {
         return;
@@ -590,6 +621,7 @@ void Config::ensureDeviceMouseConfigInitialized(const QString &serial)
 
 void Config::setDeviceMouseConfig(const QString &serial, const DeviceMouseConfig &config)
 {
+    // 将设备鼠标配置写回 userdata.ini；隐藏调参项也一并保留，避免 UI 保存覆盖掉手写值。
     const QString trimmedSerial = serial.trimmed();
     if (trimmedSerial.isEmpty()) {
         return;
@@ -607,6 +639,9 @@ void Config::setDeviceMouseConfig(const QString &serial, const DeviceMouseConfig
                          qBound(0, config.normalMouseCursorClickSuppressionMs, 300));
     m_userData->setValue(SERIAL_NORMAL_MOUSE_TAP_MIN_HOLD_MS_KEY,
                          qBound(0, config.normalMouseTapMinHoldMs, 40));
+    m_userData->setValue(SERIAL_REMOTE_CURSOR_IMMEDIATE_KEY, config.remoteCursorImmediate);
+    m_userData->setValue(SERIAL_REMOTE_CURSOR_MAX_PENDING_BYTES_KEY,
+                         qBound(0, config.remoteCursorMaxPendingBytes, 65536));
     m_userData->endGroup();
     m_userData->sync();
 }

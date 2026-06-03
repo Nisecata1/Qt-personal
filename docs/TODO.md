@@ -1,43 +1,18 @@
-# TODO
-## 低优先级
-- text转换 https://github.com/Genymobile/scrcpy/commit/c916af0984f72a60301d13fa8ef9a85112f54202?tdsourcetag=s_pctim_aiomsg
-- 关闭number lock时的数字小键盘处理 https://github.com/Genymobile/scrcpy/commit/cd69eb4a4fecf8167208399def4ef536b59c9d22
-- mipmapping https://github.com/Genymobile/scrcpy/commit/bea7658807d276aeab7d18d856a366c83ee05827
+#
 
-## 中优先级
-- 脚本
-- 某些机器软解不行
-- opengles 3.0 兼容性参考[这里](https://github.com/libretro/glsl-shaders/blob/master/nnedi3/shaders/yuv-to-rgb-2x.glsl)
-- 通过host:track-devices实现自动连接 https://www.jianshu.com/p/2cb86c6de76c
-- 旋转 https://github.com/Genymobile/scrcpy/commit/d48b375a1dbc8bed92e3424b5967e59c2d8f6ca1
-- 禁用屏幕保护 https://github.com/Genymobile/scrcpy/commit/dc7b60e6199b90a45ea26751988f6f30f8b2efdf
-- 自定义快捷键 https://github.com/Genymobile/scrcpy/commit/1b76d9fd78c3a88a8503a72d4cd2f65bdb836aa4
+# ui界面
 
-## 高优先级
-- linux打包以及版本号
-- 关于
-- 音频转发 https://github.com/rom1v/sndcpy
+1. ctrl+E快捷配置bug：
+   当应用某个脚本并启动服务打开窗口之后，在按下ctrl+E快捷进入配置脚本映射按键的界面的时候有一个bug：点击任意一个界面上的脚本键想要进一步配置的时候，该按键对应的配置窗口消失了，切换点击其他界面上的脚本键，配置窗口也不出现
+   调整过了还是不行
 
-# mark
-## ffmpeg
-[ffmpeg编译参数详解](https://www.cnblogs.com/wainiwann/p/4204230.html)
+2. 在配置文件C:\develop\QtScrcpy-boost\output\x64\Release\config\userdata.ini 的 [common] 下
+   有哪一个配置没有开放在ui面板上的吗，把没开放的配置解释一下用途，并分析需不需要开放在ui上
 
-## fontawesome
-[fontawesome 在线搜索](http://www.fontawesome.com.cn/cheatsheet/)
+3. 取消应用脚本键
+   在主界面刷新脚本和应用脚本的同一行右边，添加一个取消应用脚本的功能键
 
-## adb
-以下是 ADB 和 Fastboot 的谷歌官方下载链接：
+4. 键位映射，f键改成连按几下，防止卡牌传送老是点不到
 
-ADB和Fastboot for Windows
-
-https://dl.google.com/android/repository/platform-tools-latest-windows.zip
-
-ADB和Fastboot for Mac
-
-https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
-
-ADB和Fastboot for Linux
-
-https://dl.google.com/android/repository/platform-tools-latest-linux.zip
-
-由于这些是直接的 Google 链接，用户可以确保下载不仅是官方的，而且将始终能够获得最新版本的 ADB 和 Fastboot
+5. 分析当前开启 center crop 之后，手机确实只渲染了中间一小块吗，而不是渲染整个屏幕，然后裁剪，传到电脑的
+   毕竟 center crop 的目的是降低手机编码压力

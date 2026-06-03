@@ -1,12 +1,30 @@
 #include "keymapeditoroverlay.h"
 
 #include <cmath>
+#include <QFontMetricsF>
 #include <QMouseEvent>
 #include <QPainter>
 
 namespace {
 constexpr int kHandleRadius = 10;
 constexpr int kHitDistance = 14;
+constexpr qreal kLabelOffsetX = 12.0;
+constexpr qreal kLabelOffsetY = 12.0;
+constexpr qreal kLabelHeight = 24.0;
+constexpr qreal kLabelPadding = 6.0;
+constexpr qreal kMaxLabelWidth = 140.0;
+
+QFont overlayFont()
+{
+    return QFont(QStringLiteral("Microsoft YaHei UI"), 9);
+}
+
+QRectF labelRectForHandle(const QPointF &center, const QString &label)
+{
+    const QFontMetricsF metrics(overlayFont());
+    const qreal labelWidth = qMin(kMaxLabelWidth, metrics.horizontalAdvance(label) + kLabelPadding);
+    return QRectF(center.x() + kLabelOffsetX, center.y() - kLabelOffsetY, labelWidth, kLabelHeight);
+}
 }
 
 KeymapEditorOverlay::KeymapEditorOverlay(QWidget *parent)
@@ -82,7 +100,7 @@ void KeymapEditorOverlay::paintEvent(QPaintEvent *event)
     }
 
     const QVector<KeymapEditorDocument::HandleInfo> handles = m_document->handleInfos(m_selectedNodeId);
-    painter.setFont(QFont(QStringLiteral("Microsoft YaHei UI"), 9));
+    painter.setFont(overlayFont());
     for (int i = 0; i < handles.size(); ++i) {
         const KeymapEditorDocument::HandleInfo &handle = handles.at(i);
         const QPointF center = toPixel(handle.normalizedPos);
@@ -92,7 +110,7 @@ void KeymapEditorOverlay::paintEvent(QPaintEvent *event)
         painter.setBrush(base);
         painter.drawEllipse(center, kHandleRadius, kHandleRadius);
         painter.setPen(QColor(240, 240, 240));
-        painter.drawText(QRectF(center.x() + 12.0, center.y() - 12.0, 140.0, 24.0), handle.label);
+        painter.drawText(labelRectForHandle(center, handle.label), handle.label);
     }
 }
 
@@ -103,21 +121,24 @@ void KeymapEditorOverlay::mousePressEvent(QMouseEvent *event)
         return;
     }
 
-    const ActiveHandle handle = hitTestHandle(event->pos());
-    if (handle.valid) {
-        m_activeHandle = handle;
-        m_dragging = true;
-        if (m_selectedNodeId != handle.nodeId) {
-            m_selectedNodeId = handle.nodeId;
+    const int selectedNodeId = hitTestSelectableNode(event->pos());
+    if (selectedNodeId >= 0) {
+        if (m_selectedNodeId != selectedNodeId) {
+            m_selectedNodeId = selectedNodeId;
             emit nodeSelected(m_selectedNodeId);
         }
+        const ActiveHandle handle = hitTestHandle(event->pos());
+        if (handle.valid) {
+            m_activeHandle = handle;
+            m_dragging = true;
+        } else {
+            resetDragState();
+        }
+        update();
         event->accept();
         return;
     }
 
-    m_selectedNodeId = -1;
-    emit nodeSelected(-1);
-    update();
     event->accept();
 }
 
@@ -157,6 +178,28 @@ QPointF KeymapEditorOverlay::toNormalized(const QPointF &pixelPos) const
     return QPointF(x, y);
 }
 
+int KeymapEditorOverlay::hitTestSelectableNode(const QPointF &pixelPos) const
+{
+    if (!m_document) {
+        return -1;
+    }
+
+    const QVector<KeymapEditorDocument::HandleInfo> handles = m_document->handleInfos(m_selectedNodeId);
+    for (int i = 0; i < handles.size(); ++i) {
+        const KeymapEditorDocument::HandleInfo &handle = handles.at(i);
+        const QPointF center = toPixel(handle.normalizedPos);
+        const QPointF delta = center - pixelPos;
+        if (std::hypot(delta.x(), delta.y()) <= kHitDistance) {
+            return handle.nodeId;
+        }
+        if (labelRectForHandle(center, handle.label).contains(pixelPos)) {
+            return handle.nodeId;
+        }
+    }
+
+    return -1;
+}
+
 KeymapEditorOverlay::ActiveHandle KeymapEditorOverlay::hitTestHandle(const QPointF &pixelPos) const
 {
     ActiveHandle result;
@@ -168,13 +211,10 @@ KeymapEditorOverlay::ActiveHandle KeymapEditorOverlay::hitTestHandle(const QPoin
     for (int i = 0; i < handles.size(); ++i) {
         const KeymapEditorDocument::HandleInfo &handle = handles.at(i);
         const QPointF delta = toPixel(handle.normalizedPos) - pixelPos;
-        if (std::hypot(delta.x(), delta.y()) <= kHitDistance) {
+        if (handle.movable && std::hypot(delta.x(), delta.y()) <= kHitDistance) {
             result.nodeId = handle.nodeId;
             result.role = handle.role;
-            result.valid = handle.movable;
-            if (!result.valid && handle.nodeId >= 0) {
-                result.nodeId = handle.nodeId;
-            }
+            result.valid = true;
             return result;
         }
     }

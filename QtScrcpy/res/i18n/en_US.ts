@@ -200,6 +200,10 @@
         <translation>show fps</translation>
     </message>
     <message>
+        <source>show bitrate</source>
+        <translation>show bitrate</translation>
+    </message>
+    <message>
         <source>stay awake</source>
         <translation>stay awake</translation>
     </message>

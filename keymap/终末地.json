@@ -1,0 +1,349 @@
+{
+    "height": 1439,
+    "keyMapNodes": [
+        {
+            "alwaysActive": true,
+            "centerPos": {
+                "x": 0.204102,
+                "y": 0.700326
+            },
+            "comment": "移动方向键",
+            "downKey": "Key_S",
+            "downOffset": 0.1,
+            "leftKey": "Key_A",
+            "leftOffset": 0.1,
+            "opacity": 1,
+            "resetMove": true,
+            "rightKey": "Key_D",
+            "rightOffset": 0.1,
+            "switchMap": false,
+            "type": "KMT_STEER_WHEEL",
+            "upKey": "Key_W",
+            "upOffset": 0.1
+        },
+        {
+            "alwaysActive": true,
+            "key": "Key_Equal",
+            "pos": {
+                "x": 0.755371,
+                "y": 0.331162
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "跳跃",
+            "key": "Key_Space",
+            "pos": {
+                "x": 0.874023,
+                "y": 0.666667
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "小地图",
+            "key": "Key_M",
+            "pos": {
+                "x": 0.137695,
+                "y": 0.188925
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "alwaysActive": true,
+            "key": "Key_Tab",
+            "pos": {
+                "x": 0.325195,
+                "y": 0.052117
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_C",
+            "pos": {
+                "x": 0.879883,
+                "y": 0.052117
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_Z",
+            "pos": {
+                "x": 0.941,
+                "y": 0.899
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "弦化",
+            "key": "Key_E",
+            "pos": {
+                "x": 0.688965,
+                "y": 0.555917
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "更换弹夹",
+            "key": "Key_R",
+            "pos": {
+                "x": 0.730233,
+                "y": 0.906736
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_F",
+            "pos": {
+                "x": 0.65625,
+                "y": 0.478827
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_G",
+            "pos": {
+                "x": 0.88623,
+                "y": 0.391965
+            },
+            "resetMove": true,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_H",
+            "pos": {
+                "x": 0.904785,
+                "y": 0.465798
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_1",
+            "pos": {
+                "x": 0.723633,
+                "y": 0.149837
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_2",
+            "pos": {
+                "x": 0.784668,
+                "y": 0.149837
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_3",
+            "pos": {
+                "x": 0.841309,
+                "y": 0.158523
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_4",
+            "pos": {
+                "x": 0.905273,
+                "y": 0.153094
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_F3",
+            "pos": {
+                "x": 0.961,
+                "y": 0.339
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "switchMapPos": {
+                "x": 0.5,
+                "y": 0.5
+            },
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_F4",
+            "pos": {
+                "x": 0.8552,
+                "y": 0.0585
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "switchMapPos": {
+                "x": 0.5,
+                "y": 0.5
+            },
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_X",
+            "pos": {
+                "x": 0.962,
+                "y": 0.449
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "alwaysActive": true,
+            "key": "Key_Escape",
+            "pos": {
+                "x": 0.925293,
+                "y": 0.057546
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "RightButton",
+            "pos": {
+                "x": 0.878418,
+                "y": 0.862106
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "LeftButton",
+            "pos": {
+                "x": 0.808105,
+                "y": 0.770901
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_Q",
+            "pos": {
+                "x": 0.903809,
+                "y": 0.274701
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "MiddleButton",
+            "pos": {
+                "x": 0.7691,
+                "y": 0.2556
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "key": "Key_B",
+            "pos": {
+                "x": 0.841309,
+                "y": 0.054289
+            },
+            "resetMove": false,
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "打开商城",
+            "key": "Key_P",
+            "pos": {
+                "x": 0.042,
+                "y": 0.3689
+            },
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "放下炸弹",
+            "key": "Key_5",
+            "pos": {
+                "x": 0.4679,
+                "y": 0.9556
+            },
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "弦化",
+            "key": "Key_Control",
+            "pos": {
+                "x": 0.692383,
+                "y": 0.568947
+            },
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "副武器",
+            "key": "ExtraButton2",
+            "pos": {
+                "x": 0.2761,
+                "y": 0.542
+            },
+            "switchMap": false,
+            "type": "KMT_CLICK"
+        },
+        {
+            "comment": "",
+            "dragSpeed": 1,
+            "endPos": {
+                "x": 0.8505,
+                "y": 0.2568
+            },
+            "key": "Key_T",
+            "startDelay": 0,
+            "startPos": {
+                "x": 0.8183,
+                "y": 0.2532
+            },
+            "switchMap": false,
+            "type": "KMT_DRAG"
+        }
+    ],
+    "mouseMoveMap": {
+        "speedRatioX": 3,
+        "speedRatioY": 2,
+        "startPos": {
+            "x": 0.651367,
+            "y": 0.340934
+        },
+        "switchMap": false,
+        "timedResetView": false,
+        "type": "KMT_MOUSE_MOVE"
+    },
+    "switchKey": "Key_Alt",
+    "width": 2559
+}

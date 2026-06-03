@@ -15,3 +15,11 @@ build-*
 userdata.ini
 Info_Mac.plist
 /ci/build_temp
+/AGENTS.md
+/_tmp_*/
+/backup/
+/docs/TODO-old.md
+/docs/QT-nadir-inhence-docs/scrcpy-server/scrcpy-server~new/
+/docs/QT-nadir-inhence-docs/scrcpy-server/scrcpy-server~new2/
+/docs/QT-nadir-inhence-docs/scrcpy-server/*.zip
+/scrcpy_cursor_overlay.patch.generated

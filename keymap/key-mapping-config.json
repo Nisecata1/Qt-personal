@@ -120,8 +120,8 @@
         {
             "key": "Key_G",
             "pos": {
-                "x": 0.4088,
-                "y": 0.919
+                "x": 0.435547,
+                "y": 0.917391
             },
             "resetMove": true,
             "switchMap": false,
@@ -219,8 +219,8 @@
             "alwaysActive": true,
             "key": "Key_Escape",
             "pos": {
-                "x": 0.036,
-                "y": 0.06
+                "x": 0.040039,
+                "y": 0.063043
             },
             "resetMove": false,
             "switchMap": false,
@@ -290,8 +290,8 @@
             "comment": "放下炸弹",
             "key": "Key_5",
             "pos": {
-                "x": 0.4679,
-                "y": 0.9556
+                "x": 0.478516,
+                "y": 0.93913
             },
             "switchMap": false,
             "type": "KMT_CLICK"

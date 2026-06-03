@@ -200,6 +200,10 @@
       <translation>FPS を表示</translation>
     </message>
     <message>
+      <source>show bitrate</source>
+      <translation>ビットレートを表示</translation>
+    </message>
+    <message>
       <source>stay awake</source>
       <translation>画面を常時点灯</translation>
     </message>

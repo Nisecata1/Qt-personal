@@ -70,6 +70,7 @@ private slots:
     void on_localTextInputCheck_toggled(bool checked);
     void on_localTextInputShortcutEdit_keySequenceChanged(const QKeySequence &keySequence);
     void on_keymapEditorShortcutEdit_keySequenceChanged(const QKeySequence &keySequence);
+    void on_gameMouseLockShortcutEdit_keySequenceChanged(const QKeySequence &keySequence);
     void on_usbConnectBtn_clicked();
     void on_wifiConnectBtn_clicked();
     void on_connectedPhoneList_itemDoubleClicked(QListWidgetItem *item);
@@ -105,8 +106,10 @@ private:
     quint32 getBitRate();
     qsc::DeviceParams buildDeviceParams(const QString &serial);
     const QString &getServerPath();
+    void applyStatsOverlayConfigToOpenVideoForms();
     void applyLocalTextInputConfigToOpenVideoForms();
     void applyKeymapEditorShortcutToOpenVideoForms();
+    void applyGameMouseLockShortcutToOpenVideoForms();
     void updateVideoFormScriptBinding(const QString &serial, const QString &scriptFilePath, const QString &scriptDisplayName, const QString &scriptJson);
     void loadIpHistory();
     void saveIpHistory(const QString &ip);
@@ -130,10 +133,12 @@ private:
     QString buildRecordPathToolTip() const;
     QString buildLocalTextInputShortcutToolTip() const;
     QString buildKeymapEditorShortcutToolTip() const;
+    QString buildGameMouseLockShortcutToolTip() const;
     QString buildDeviceIpToolTip() const;
     QString buildDevicePortToolTip() const;
     QString buildMouseConfigToggleToolTip() const;
     QKeySequence currentKeymapEditorShortcut() const;
+    QKeySequence currentGameMouseLockShortcut() const;
     ThemeMode currentThemeModeSelection() const;
     QString currentSelectedSerial() const;
     QString formatSelectedDeviceDisplayName(const QString &serial) const;
@@ -157,6 +162,7 @@ private:
     QGroupBox *m_gameDeviceConfigGroup = nullptr;
     QLabel *m_gameSelectedDeviceSerialValue = nullptr;
     QKeySequenceEdit *m_keymapEditorShortcutEdit = nullptr;
+    QKeySequenceEdit *m_gameMouseLockShortcutEdit = nullptr;
     QLabel *m_selectedDeviceSerialValue = nullptr;
     QCheckBox *m_deviceCenterCropCheck = nullptr;
     QSpinBox *m_deviceCenterCropSizeSpin = nullptr;

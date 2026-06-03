@@ -34,6 +34,7 @@ private:
 
     QPointF toPixel(const QPointF &normalizedPos) const;
     QPointF toNormalized(const QPointF &pixelPos) const;
+    int hitTestSelectableNode(const QPointF &pixelPos) const;
     ActiveHandle hitTestHandle(const QPointF &pixelPos) const;
     void resetDragState();
 

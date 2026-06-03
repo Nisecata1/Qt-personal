@@ -1,4 +1,6 @@
-# QtScrcpy 
+# QtScrcpy-boost
+
+Fork of `QtScrcpy`, maintained as a Windows-first personal productivity and game-control edition.
 
 [![Financial Contributors to Open Collective](https://opencollective.com/QtScrcpy/all/badge.svg?label=financial+contributors)](https://opencollective.com/QtScrcpy)
 ![Windows](https://github.com/barry-ran/QtScrcpy/workflows/Windows/badge.svg)
@@ -10,6 +12,26 @@
 ![star](https://img.shields.io/github/stars/barry-ran/QtScrcpy.svg)
 
 [中文用户？点我查看中文介绍](README_zh.md)
+
+## Fork Highlights
+
+This repository is maintained as a Windows-first personal productivity and game-control fork of QtScrcpy. It keeps the original multi-device mirroring workflow, and adds several practical improvements for script-driven control, remote cursor rendering, and long-session input tuning.
+
+### What This Fork Adds
+
+- Patched on-device remote cursor rendering with configurable cursor size and device-scoped compatibility tuning.
+- Device-specific mouse control parameters in `userdata.ini:[serial]` for normal-mode click stability, cursor throttling, pending-byte protection, and vendor-specific compatibility switches.
+- Real-time stats overlay in the video window with live `show fps` and `show bitrate` toggles.
+- Game-focused hotkeys and overlays, including local text input, configurable keymap editor shortcut, and a configurable manual mouse-lock shortcut for script windows.
+- Relative-look tuning with per-device overrides and a more stable default send rate (`RelativeLookSendHz=144`).
+- Per-device center crop and several workflow fixes around keymap editing, overlay hit-testing, and mouse event passthrough.
+
+### Practical Notes For This Fork
+
+- Runtime config is resolved from the packaged `config/` folder next to `QtScrcpy.exe`; for normal packaged usage, edit `output/x64/Release/config/config.ini` and `output/x64/Release/config/userdata.ini`.
+- Most user-visible global toggles are stored in `userdata.ini:[common]`.
+- Most advanced input and mouse tuning is stored per device in `userdata.ini:[serial]`.
+- Remote cursor rendering requires the patched `scrcpy-server` shipped in this repo. Build and replacement notes are documented in [`docs/QT-nadir-inhence-docs/03-服务端-远端光标渲染与构建手册.md`](docs/QT-nadir-inhence-docs/03-%E6%9C%8D%E5%8A%A1%E7%AB%AF-%E8%BF%9C%E7%AB%AF%E5%85%89%E6%A0%87%E6%B8%B2%E6%9F%93%E4%B8%8E%E6%9E%84%E5%BB%BA%E6%89%8B%E5%86%8C.md).
 
 QtScrcpy supports displaying and controlling Android devices via USB or over network. It does NOT require root privileges.
 
@@ -206,14 +228,15 @@ This means for packaged/portable usage, you should edit:
 - `config.ini` may contain comments (`; ...`).
 - `userdata.ini` should not contain comments (it is rewritten by `QSettings`; comments may be lost or become malformed keys).
 - `RelativeLookCoordMode` and `RelativeLookLogicalSize` are read from `[common]`.
-- `RelativeLookRawInput`, `RelativeLookSendHz`, `RelativeLookRawScale` support per-device override from `[<serial>]` (ADB serial section) with `[common]` fallback.
+- `RelativeLookRawInput`, `RelativeLookSendHz`, `RelativeLookRawScale`, and `RelativeLookRecoilStrength` support per-device override from `[<serial>]` (ADB serial section) with `[common]` fallback.
+- Normal-mode remote cursor and mouse compatibility tuning are device-scoped and are primarily read from `userdata.ini:[<serial>]`.
 - If `VideoCenterCropSize > 0`, center crop is enabled and control coordinates automatically stay mapped to the whole device screen. The video window represents the full-screen canvas, and the cropped stream is drawn at its real centered position inside that canvas.
 - Center crop reduces the captured/encoded video region; it is not a guaranteed reduction of the game's on-device render workload.
 - OpenGL viewport sizing is computed from the actual viewport observed at the start of `paintGL()`, not by trusting `resizeGL(w, h)` alone, so Windows high DPI scaling does not shrink the image into the lower-left corner.
-- `VideoEnabled` and `VideoCenterCrop*` are session-scoped settings: change them, then reconnect the current device session to apply.
+- `VideoEnabled`, `MaxFps`, `CodecName`, `AudioEnable`, and `VideoCenterCrop*` are session-scoped settings: change them, then reconnect the current device session to apply.
 - Device orientation is polled every 2 seconds for all video sessions, not only center-crop sessions, so both cropped and full-canvas windows auto-adjust after rotation.
 - When `LockDirectionIndex=0`, QtScrcpy keeps scrcpy's default auto-rotation behavior and does not send `capture_orientation=0` to the server. `capture_orientation` is only sent for explicit orientation locks or explicit non-zero capture rotation.
-- Effective `MaxFps` and `CodecName` are currently read from `userdata.ini:[common]` during server launch (not from `config.ini`).
+- The packaged server binary must be the patched build from this fork if you want remote cursor rendering to work.
 
 ### `config.ini` keys (`[common]`)
 
@@ -229,10 +252,8 @@ This means for packaged/portable usage, you should edit:
 | `AdbPath` | empty | Custom adb path |
 | `LogLevel` | `info` | `verbose`/`debug`/`info`/`warn`/`error` |
 | `CodecOptions` | empty | Encoder options passed to scrcpy server |
-| `RemoteCursorEnabled` | `false` | Remote cursor overlay switch (no-script path) |
-| `CursorSizePx` | `24` | Remote cursor size, clamped to `8..128` |
 | `MaxFps` (legacy) | `0` | Legacy location, currently overridden by `userdata.ini:[common]/MaxFps` at server start |
-| `CodecName` (legacy) | empty | Legacy location, currently overridden by `userdata.ini:[common]/CodecName` at server start |
+| `CodecName` (legacy fallback) | empty | Used as a fallback unless `userdata.ini:[common]/CodecName` overrides it at server start |
 
 ### `userdata.ini` keys
 
@@ -249,34 +270,39 @@ This means for packaged/portable usage, you should edit:
 | --- | --- | --- |
 | `RecordPath` | empty | Recording path |
 | `BitRate` | `2000000` | Video bitrate |
+| `ThemeMode` | `System` | `System`/`Light`/`Dark` |
 | `MaxSizeIndex` | `2` | UI max-size combo index: `0=640,1=720,2=1080,3=1280,4=1920,5=original` |
 | `RecordFormatIndex` | `0` | `0=mp4,1=mkv` |
 | `LockDirectionIndex` | `0` | `0=no lock,1=0,2=90,3=180,4=270` |
+| `LocalTextInputEnabled` | `true` | Enable local text input overlay in video windows |
+| `LocalTextInputShortcut` | `Ctrl+Shift+T` | Local text input hotkey |
+| `KeymapEditorShortcut` | `Ctrl+E` | Keymap editor hotkey for script windows |
+| `GameMouseLockShortcut` | `QuoteLeft` | Manual mouse-lock hotkey for script windows |
 | `RecordScreen` | `false` | Record to file |
 | `RecordBackGround` | `false` | Background mode (no display window) |
 | `ReverseConnect` | `true` | Prefer `adb reverse` |
 | `ShowFPS` | `false` | Show FPS overlay |
+| `ShowBitRate` | `false` | Show live receive bitrate overlay |
 | `WindowOnTop` | `false` | Keep video window on top |
 | `AutoOffScreen` | `false` | Turn device screen off after start |
 | `FramelessWindow` | `false` | Frameless video window |
 | `KeepAlive` | `false` | Keep device awake |
 | `SimpleMode` | `false` | Single/simple mode toggle |
 | `AutoUpdateDevice` | `true` | Auto-refresh device list |
+| `AutoUpdateIntervalSec` | `5` | Device list auto-refresh interval |
 | `showToolbar` | `true` | Show toolbar in video window |
 | `TrayMessageShown` | `false` | Internal tray hint state |
-| `MaxFps` | `120` (effective fallback at server start) | Effective location for FPS cap |
+| `MaxFps` | `0` | Effective location for FPS cap; `0` means unlimited |
 | `CodecName` | empty | Effective location for explicit encoder name |
 | `AudioEnable` | `false` | If `false`, sends `audio=false` to scrcpy server |
 | `VideoEnabled` | `true` | Enable video stream; `false` means no-video control mode |
-| `VideoCenterCropSize` | `0` | `0` disables center crop and restores full-canvas display; `>0` crops to a centered square, draws that crop inside the full-screen canvas, keeps control mapped to the whole screen, and requires reconnect to apply |
-| `VideoCenterCropFallbackWidth` | `2400` | Fallback physical width when `wm size` cannot be resolved for crop setup |
-| `VideoCenterCropFallbackHeight` | `1080` | Fallback physical height when `wm size` cannot be resolved for crop setup |
 | `MouseSmoothFrames` | `4` | Mouse delta smoothing frames, clamped to `1..20` |
 | `RelativeLookCoordMode` | `logical` | `logical` or `video` |
 | `RelativeLookLogicalSize` | `65535` | Clamped to `4096..65535` |
 | `RelativeLookRawInput` | `true` | Windows Raw Input switch for relative-look path |
-| `RelativeLookSendHz` | `240` | Raw input dispatch Hz, clamped to `60..1000` |
+| `RelativeLookSendHz` | `144` | Raw input dispatch Hz, clamped to `60..1000` |
 | `RelativeLookRawScale` | `12.0` | Raw delta scale, clamped to `0.1..50.0` |
+| `RelativeLookRecoilStrength` | `0.0` | Extra recoil compensation strength |
 | `SteerWheelRecoverySpeed` | `0.45` | Clamped to `0.1..1.0` |
 | `SteerWheelRecoveryNoise` | `0.0020` | Clamped to `0.0..0.01` |
 | `SteerWheelRecoveryFinalNoise` | `0.0004` | Clamped to `0.0..0.005` |
@@ -290,18 +316,36 @@ This means for packaged/portable usage, you should edit:
 | `WindowRectW` | `-1` | Stored window geometry |
 | `WindowRectH` | `-1` | Stored window geometry |
 | `NickName` | `Phone` | Custom device display name |
+| `KeymapEditorRectX/Y/W/H` | `-1` | Stored keymap editor panel geometry |
+| `RemoteCursorEnabled` | `false` | Render remote cursor on device for this device |
+| `CursorSizePx` | `24` | Remote cursor size, clamped to `8..128` |
+| `NormalMouseCompatEnabled` | `false` | Enable normal-mode mouse compatibility path |
+| `NormalMouseTouchPriorityEnabled` | `true` | Prefer click/touch stability over cursor updates |
+| `NormalMouseCursorThrottleEnabled` | `true` | Enable throttling for remote cursor updates |
+| `NormalMouseCursorFlushIntervalMs` | `33` | Cursor flush interval, clamped to `16..100` |
+| `NormalMouseCursorClickSuppressionMs` | `120` | Click suppression window, clamped to `0..300` |
+| `NormalMouseTapMinHoldMs` | `16` | Minimum hold for normal left click, clamped to `0..40` |
+| `RemoteCursorImmediate` | `true` | Try immediate remote cursor send path for this device |
+| `RemoteCursorMaxPendingBytes` | `1024` | Drop stale cursor positions once control socket backlog grows past this threshold |
+| `RemoteCursorSdkMouseCompatEnabled` | `false` | Hidden device-scoped compatibility switch for vendors that require Android mouse semantics |
+| `VideoCenterCropSize` | `0` | `0` disables center crop; `>0` enables device-specific center crop |
+| `VideoCenterCropFallbackWidth` | fallback to `[common]` or `2400` | Fallback physical width when `wm size` cannot be resolved |
+| `VideoCenterCropFallbackHeight` | fallback to `[common]` or `1080` | Fallback physical height when `wm size` cannot be resolved |
 | `RelativeLookRawInput` | fallback to `[common]` | Per-device override |
 | `RelativeLookSendHz` | fallback to `[common]` | Per-device override |
 | `RelativeLookRawScale` | fallback to `[common]` | Per-device override |
+| `RelativeLookRecoilStrength` | fallback to `[common]` | Per-device override |
 
 ### Hot-reload matrix
 
 | Setting | File | Reload behavior |
 | --- | --- | --- |
-| `RemoteCursorEnabled`, `CursorSizePx` | `config.ini` | Hot reload via `QFileSystemWatcher` + debounce (`120ms`) |
+| `RemoteCursorEnabled`, `CursorSizePx`, `NormalMouseCompat*`, `RemoteCursorImmediate`, `RemoteCursorMaxPendingBytes`, `RemoteCursorSdkMouseCompatEnabled` | `userdata.ini:[serial]` | Low-frequency reload in normal mouse path; usually no reconnect needed |
 | `RelativeLookRawInput`, `RelativeLookSendHz`, `RelativeLookRawScale` | `userdata.ini` | Hot reload via `QFileSystemWatcher` + debounce (`120ms`), applied immediately |
+| `RelativeLookRecoilStrength` | `userdata.ini` | Hot reload together with other relative-look settings |
 | `RelativeLookCoordMode`, `RelativeLookLogicalSize` | `userdata.ini` | Polled reload in game input path (`~200ms` check interval) |
 | `SteerWheelRecovery*` | `userdata.ini` | Polled reload in game input path (`~80ms` check interval) |
+| `ShowFPS`, `ShowBitRate`, local text input hotkeys, keymap editor hotkey, game mouse-lock hotkey | main UI + `userdata.ini:[common]` | Applied immediately to already-open video windows |
 | `MouseSmoothFrames` | `userdata.ini` | Loaded once per input-converter lifecycle (reconnect device/app to guarantee refresh) |
 | `MaxFps`, `CodecName`, `AudioEnable`, `VideoEnabled`, `VideoCenterCrop*` | `userdata.ini` | Applied when starting the current scrcpy device session (reconnect current device needed) |
 
@@ -312,7 +356,7 @@ Remote cursor rendering relies on the patched server protocol and overlay implem
 - `TYPE_INJECT_CURSOR (0x80)`
 - `TYPE_SET_CURSOR_CONFIG (0x81)`
 
-If your `scrcpy-server` is not built from the patched sources, `RemoteCursorEnabled` and `CursorSizePx` will not have visible effect on device overlay.
+If your `scrcpy-server` is not built from the patched sources, device-scoped remote cursor settings such as `RemoteCursorEnabled` and `CursorSizePx` will not have visible effect on the device overlay.
 
 ## Interface button introduction：
 

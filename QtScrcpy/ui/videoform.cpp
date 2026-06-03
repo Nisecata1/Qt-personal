@@ -16,6 +16,7 @@
 #include <QSettings>
 #include <QScreen>
 #include <QShortcut>
+#include <QStringList>
 #include <QStyle>
 #include <QStyleOption>
 #include <QTimer>
@@ -264,6 +265,14 @@ bool keymapEditorGeometryIntersectsVisibleScreen(const QRect &rect)
     }
     return false;
 }
+
+QString formatBitRateOverlayText(quint64 bitRate)
+{
+    if (bitRate >= 1000000ULL) {
+        return QStringLiteral("BR:%1 Mbps").arg(QString::number(static_cast<double>(bitRate) / 1000000.0, 'f', 1));
+    }
+    return QStringLiteral("BR:%1 Kbps").arg(QString::number(static_cast<double>(bitRate) / 1000.0, 'f', 0));
+}
 } // namespace
 
 #pragma pack(push, 1)
@@ -301,6 +310,7 @@ VideoForm::VideoForm(bool framelessWindow, bool skin, bool showToolbar, QWidget 
 VideoForm::~VideoForm()
 {
     shutdownKeymapEditor(false);
+    clearManualCursorLock();
     stopOrientationPolling();
     releaseGrabbedCursorState();
     delete ui;
@@ -362,15 +372,19 @@ void VideoForm::initUI()
     ft.setWeight(QFont::Light);
     ft.setBold(true);
     m_fpsLabel->setFont(ft);
+    m_fpsLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     m_fpsLabel->move(5, 15);
-    m_fpsLabel->setMinimumWidth(100);
     m_fpsLabel->setStyleSheet(R"(QLabel {color: #00FF00;})");
+    m_fpsLabel->hide();
+    refreshStatsOverlay();
 
     setMouseTracking(true);
     m_videoWidget->setMouseTracking(true);
     ui->keepRatioWidget->setMouseTracking(true);
 
     m_rawInputSendTimer = new QTimer(this);
+    // 相对视角 raw input 依赖固定发送节拍，使用精确定时器减少长时间移动时的间隔抖动。
+    m_rawInputSendTimer->setTimerType(Qt::PreciseTimer);
     connect(m_rawInputSendTimer, &QTimer::timeout, this, [this]() {
         dispatchRawInputMouseMove(false);
     });
@@ -461,10 +475,38 @@ void VideoForm::removeBlackRect()
 
 void VideoForm::showFPS(bool show)
 {
+    setStatsOverlayConfig(show, m_showBitRateOverlay);
+}
+
+void VideoForm::setStatsOverlayConfig(bool showFps, bool showBitRate)
+{
+    m_showFpsOverlay = showFps;
+    m_showBitRateOverlay = showBitRate;
+    refreshStatsOverlay();
+}
+
+void VideoForm::refreshStatsOverlay()
+{
     if (!m_fpsLabel) {
         return;
     }
-    m_fpsLabel->setVisible(show);
+
+    QStringList parts;
+    if (m_showFpsOverlay) {
+        parts << QStringLiteral("FPS:%1").arg(m_lastFps);
+    }
+    if (m_showBitRateOverlay) {
+        parts << formatBitRateOverlayText(m_lastBitRate);
+    }
+
+    if (parts.isEmpty()) {
+        m_fpsLabel->hide();
+        return;
+    }
+
+    m_fpsLabel->setText(parts.join(QStringLiteral(" | ")));
+    m_fpsLabel->adjustSize();
+    m_fpsLabel->show();
 }
 
 void VideoForm::updateRender(int width, int height, uint8_t* dataY, uint8_t* dataU, uint8_t* dataV, int linesizeY, int linesizeU, int linesizeV)
@@ -550,6 +592,7 @@ void VideoForm::applyVideoCanvasLayout()
     m_videoWidget->setContentRect(m_contentRect);
     positionLocalTextInput();
     positionKeymapEditorUi();
+    applyCursorConstraintState();
 }
 void VideoForm::setSerial(const QString &serial)
 {
@@ -631,11 +674,47 @@ void VideoForm::setKeymapEditorShortcut(const QKeySequence &shortcut)
     updateKeymapEditorShortcutStates();
 }
 
+void VideoForm::setGameMouseLockShortcut(const QKeySequence &shortcut)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_gameMouseLockKeySequence = (shortcut.isEmpty() || shortcut[0] == QKeyCombination())
+        ? QKeySequence()
+        : QKeySequence(shortcut[0]);
+#else
+    m_gameMouseLockKeySequence = (shortcut.isEmpty() || shortcut[0] == 0)
+        ? QKeySequence()
+        : QKeySequence(shortcut[0]);
+#endif
+
+    if (m_toggleGameMouseLockShortcut) {
+        delete m_toggleGameMouseLockShortcut.data();
+        m_toggleGameMouseLockShortcut = nullptr;
+    }
+
+    if (m_gameMouseLockKeySequence.isEmpty()) {
+        clearManualCursorLock();
+        updateKeymapEditorShortcutStates();
+        return;
+    }
+
+    auto *shortcutObj = new QShortcut(m_gameMouseLockKeySequence, this);
+    shortcutObj->setAutoRepeat(false);
+    connect(shortcutObj, &QShortcut::activated, this, [this]() {
+        toggleManualCursorLock();
+    });
+    m_toggleGameMouseLockShortcut = shortcutObj;
+    updateKeymapEditorShortcutStates();
+}
+
 void VideoForm::setScriptBinding(const QString &filePath, const QString &displayName, const QString &json)
 {
     m_scriptFilePath = filePath;
     m_scriptDisplayName = displayName;
     m_lastAppliedScriptJson = json;
+
+    if (!hasBoundScript()) {
+        clearManualCursorLock();
+    }
 
     if (!m_keymapEditorDocument || !m_keymapEditorActive || m_keymapEditorDocument->isDirty()) {
         return;
@@ -1031,6 +1110,7 @@ void VideoForm::setKeymapEditorActive(bool active)
 
     m_keymapEditorActive = active;
     if (active) {
+        clearManualCursorLock();
         hideLocalTextInputOverlay(false);
         if (m_toolForm) {
             m_toolForm->hide();
@@ -1070,6 +1150,7 @@ void VideoForm::enterKeymapEditor()
         return;
     }
 
+    clearManualCursorLock();
     if (m_cursorGrabbed) {
         releaseGrabbedCursorState();
     }
@@ -1175,6 +1256,9 @@ void VideoForm::updateKeymapEditorShortcutStates()
     }
     if (m_toggleKeymapEditorShortcut) {
         m_toggleKeymapEditorShortcut->setEnabled(true);
+    }
+    if (m_toggleGameMouseLockShortcut) {
+        m_toggleGameMouseLockShortcut->setEnabled(!editorActive);
     }
 }
 
@@ -1360,27 +1444,30 @@ bool VideoForm::isHost()
 
 void VideoForm::updateFPS(quint32 fps)
 {
-    //qDebug() << "FPS:" << fps;
-    if (!m_fpsLabel) {
-        return;
-    }
-    m_fpsLabel->setText(QString("FPS:%1").arg(fps));
+    m_lastFps = fps;
+    refreshStatsOverlay();
+}
+
+void VideoForm::updateBitRate(quint64 bitRate)
+{
+    m_lastBitRate = bitRate;
+    refreshStatsOverlay();
 }
 
 void VideoForm::grabCursor(bool grab)
 {
     if (!grab) {
         releaseGrabbedCursorState();
-        centerCursorToVideoFrame();
+        if (!m_manualCursorLocked) {
+            centerCursorToVideoFrame();
+        }
         return;
     }
 
     hideLocalTextInputOverlay(false);
     m_cursorGrabbed = true;
     reloadRelativeLookInputConfig();
-
-    QRect rc = getGrabCursorRect();
-    MouseTap::getInstance()->enableMouseEventTap(rc, true);
+    applyCursorConstraintState();
 
     const bool enableRawInput = m_rawInputEnabled;
     setRawInputActive(enableRawInput);
@@ -1502,6 +1589,16 @@ void VideoForm::submitLocalTextInputOverlay()
     hideLocalTextInputOverlay(true);
 }
 
+void VideoForm::clearManualCursorLock()
+{
+    if (!m_manualCursorLocked) {
+        return;
+    }
+
+    m_manualCursorLocked = false;
+    applyCursorConstraintState();
+}
+
 void VideoForm::reloadViewControlSeparationConfig()
 {
     const QString iniPath = resolveUserDataIniPath();
@@ -1552,14 +1649,49 @@ void VideoForm::releaseGrabbedCursorState()
 {
     m_cursorGrabbed = false;
     hideLocalTextInputOverlay(false);
-
-    QRect rc = getGrabCursorRect();
-    MouseTap::getInstance()->enableMouseEventTap(rc, false);
+    applyCursorConstraintState();
     setRawInputActive(false);
 
     while (QGuiApplication::overrideCursor()) {
         QGuiApplication::restoreOverrideCursor();
     }
+}
+
+bool VideoForm::hasBoundScript() const
+{
+    return !m_lastAppliedScriptJson.trimmed().isEmpty();
+}
+
+bool VideoForm::isCursorConstraintActive() const
+{
+    return m_cursorGrabbed || m_manualCursorLocked;
+}
+
+void VideoForm::applyCursorConstraintState()
+{
+    const bool active = isCursorConstraintActive();
+    const QRect rc = getGrabCursorRect();
+    if (active && rc.isValid() && !rc.isEmpty()) {
+        MouseTap::getInstance()->enableMouseEventTap(rc, true);
+        return;
+    }
+
+    MouseTap::getInstance()->enableMouseEventTap(QRect(), false);
+}
+
+void VideoForm::toggleManualCursorLock()
+{
+    if (isKeymapEditorActive() || !hasBoundScript()) {
+        return;
+    }
+
+    if (!m_manualCursorLocked) {
+        hideLocalTextInputOverlay(false);
+        centerCursorToVideoFrame();
+    }
+
+    m_manualCursorLocked = !m_manualCursorLocked;
+    applyCursorConstraintState();
 }
 
 void VideoForm::resetOrientationProbeState()
@@ -2080,7 +2212,7 @@ void VideoForm::reloadRelativeLookInputConfig()
 
     int sendHz = useDeviceSendHz
         ? settings.value(sendHzDeviceKey).toInt()
-        : settings.value("common/RelativeLookSendHz", 240).toInt();
+        : settings.value("common/RelativeLookSendHz", 144).toInt();
     m_rawInputSendHz = qBound(kRawInputSendHzMin, sendHz, kRawInputSendHzMax);
 
     bool scaleOk = false;
@@ -2537,6 +2669,13 @@ void VideoForm::showEvent(QShowEvent *event)
             showToolForm(this->show_toolbar);
         });
     }
+    applyCursorConstraintState();
+}
+
+void VideoForm::moveEvent(QMoveEvent *event)
+{
+    QWidget::moveEvent(event);
+    applyCursorConstraintState();
 }
 
 void VideoForm::resizeEvent(QResizeEvent *event)
@@ -2559,6 +2698,7 @@ void VideoForm::resizeEvent(QResizeEvent *event)
             m_videoWidget->update();
         }
     }
+    applyCursorConstraintState();
     QSize goodSize = ui->keepRatioWidget->goodSize();
     if (goodSize.isEmpty()) {
         return;
@@ -2586,6 +2726,7 @@ void VideoForm::closeEvent(QCloseEvent *event)
 {
     Q_UNUSED(event)
     shutdownKeymapEditor(false);
+    clearManualCursorLock();
     releaseGrabbedCursorState();
     stopOrientationPolling();
     auto device = qsc::IDeviceManage::getInstance().getDevice(m_serial);

@@ -200,6 +200,10 @@
         <translation>fps 표시</translation>
     </message>
     <message>
+        <source>show bitrate</source>
+        <translation>비트레이트 표시</translation>
+    </message>
+    <message>
         <source>stay awake</source>
         <translation>깨어 있기</translation>
     </message>

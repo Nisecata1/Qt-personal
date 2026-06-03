@@ -25,10 +25,12 @@ struct UserBootConfig
     bool localTextInputEnabled = true;
     QString localTextInputShortcut = "Ctrl+Shift+T";
     QString keymapEditorShortcut = "Ctrl+E";
+    QString gameMouseLockShortcut = "QuoteLeft";
     bool recordScreen     = false;
     bool recordBackground = false;
     bool reverseConnect   = true;
     bool showFPS          = false;
+    bool showBitRate      = false;
     bool windowOnTop      = false;
     bool autoOffScreen    = false;
     bool framelessWindow  = false;
@@ -49,6 +51,8 @@ struct DeviceMouseConfig
     int normalMouseCursorFlushIntervalMs = 33;
     int normalMouseCursorClickSuppressionMs = 120;
     int normalMouseTapMinHoldMs = 16;
+    bool remoteCursorImmediate = true;
+    int remoteCursorMaxPendingBytes = 1024;
 };
 
 class QSettings;

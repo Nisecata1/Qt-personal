@@ -828,6 +828,19 @@
               </property>
              </widget>
             </item>
+            <item row="0" column="5">
+             <widget class="QCheckBox" name="bitrateCheck">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>show bitrate</string>
+              </property>
+             </widget>
+            </item>
             <item row="0" column="1">
              <widget class="QCheckBox" name="notDisplayCheck">
               <property name="sizePolicy">
@@ -928,7 +941,7 @@
               </property>
              </widget>
             </item>
-            <item row="2" column="0">
+            <item row="1" column="5">
              <widget class="QCheckBox" name="showToolbar">
               <property name="text">
                <string>show toolbar</string>
